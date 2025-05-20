@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const SynthesizeDataset: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [isLoading, setIsLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [datasetName, setDatasetName] = useState("");
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { 
@@ -32,6 +34,10 @@ const SynthesizeDataset: React.FC = () => {
       ] 
     }
   ]);
+
+  const startCreation = () => {
+    setShowForm(true);
+  };
 
   // Add a new conversation sample
   const addConversation = () => {
@@ -114,13 +120,55 @@ const SynthesizeDataset: React.FC = () => {
     }
   };
 
+  // If we're not showing the form yet, show the empty state
+  if (!showForm) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-2xl font-bold">Synthesize Dataset</h2>
+          <p className="text-muted-foreground mt-1">
+            Create sample conversations that will be used to generate a larger dataset
+          </p>
+        </div>
+        
+        <div className="empty-state mt-12">
+          <div className="p-8">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Plus className="h-6 w-6 text-primary" />
+            </div>
+            <h3 className="mt-4 text-lg font-semibold">Create New Dataset</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Start by creating sample conversations that will be used to synthesize a larger dataset
+            </p>
+            <Button
+              onClick={startCreation}
+              className="mt-6 gap-2 bg-primary hover:bg-orygin-red-hover text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Create Dataset
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold">Synthesize Dataset</h2>
-        <p className="text-muted-foreground mt-1">
-          Create sample conversations that will be used to generate a larger dataset
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Synthesize Dataset</h2>
+          <p className="text-muted-foreground mt-1">
+            Create sample conversations that will be used to generate a larger dataset
+          </p>
+        </div>
+        
+        <Button 
+          variant="outline" 
+          onClick={() => setShowForm(false)}
+        >
+          Cancel
+        </Button>
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -213,7 +261,7 @@ const SynthesizeDataset: React.FC = () => {
         <div className="flex justify-end space-x-4">
           <Button 
             variant="outline" 
-            onClick={() => navigate(`/projects/${projectId}/datasets`)}
+            onClick={() => setShowForm(false)}
             type="button"
           >
             Cancel

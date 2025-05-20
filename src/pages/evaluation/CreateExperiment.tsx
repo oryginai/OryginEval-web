@@ -34,6 +34,7 @@ const CreateExperiment: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   
   const [isLoading, setIsLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [experimentName, setExperimentName] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
   const [selectedParameterIds, setSelectedParameterIds] = useState<string[]>([]);
@@ -64,6 +65,10 @@ const CreateExperiment: React.FC = () => {
     setDatasets(mockDatasets);
     setParameters(mockData.createMockParameters(5));
   }, [projectId]);
+
+  const startExperimentCreation = () => {
+    setShowForm(true);
+  };
 
   // Toggle parameter selection
   const toggleParameter = (parameterId: string) => {
@@ -114,16 +119,50 @@ const CreateExperiment: React.FC = () => {
     }
   };
 
-  return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold">Create Experiment</h2>
-        <p className="text-muted-foreground mt-1">
-          Set up a new evaluation experiment
-        </p>
+  // If not showing the form and we have datasets/parameters, show the empty state
+  if (!showForm && datasets.length > 0 && parameters.length > 0) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <p className="text-muted-foreground mt-1">
+            Set up a new evaluation experiment
+          </p>
+        </div>
+        
+        <div className="empty-state mt-12">
+          <div className="p-8">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Plus className="h-6 w-6 text-primary" />
+            </div>
+            <h3 className="mt-4 text-lg font-semibold">Create New Experiment</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Set up a new evaluation experiment for your LLM
+            </p>
+            <Button
+              onClick={startExperimentCreation}
+              className="mt-6 gap-2 bg-primary hover:bg-orygin-red-hover text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Create Experiment
+            </Button>
+          </div>
+        </div>
       </div>
+    );
+  }
 
-      {datasets.length === 0 || parameters.length === 0 ? (
+  // If we're missing datasets or parameters, show the missing requirements state
+  if (datasets.length === 0 || parameters.length === 0) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <p className="text-muted-foreground mt-1">
+            Set up a new evaluation experiment
+          </p>
+        </div>
+
         <div className="empty-state mt-12">
           <div className="p-8">
             <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -156,179 +195,199 @@ const CreateExperiment: React.FC = () => {
             </Button>
           </div>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Experiment Details</CardTitle>
-              <CardDescription>
-                Basic information about your experiment
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Experiment Name</Label>
-                  <Input
-                    id="name"
-                    value={experimentName}
-                    onChange={(e) => setExperimentName(e.target.value)}
-                    placeholder="e.g., GPT-4 Evaluation Round 1"
-                  />
-                </div>
+      </div>
+    );
+  }
+
+  // Show the experiment creation form
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <p className="text-muted-foreground mt-1">
+            Set up a new evaluation experiment
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => setShowForm(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Experiment Details</CardTitle>
+            <CardDescription>
+              Basic information about your experiment
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Experiment Name</Label>
+                <Input
+                  id="name"
+                  value={experimentName}
+                  onChange={(e) => setExperimentName(e.target.value)}
+                  placeholder="e.g., GPT-4 Evaluation Round 1"
+                />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Dataset</CardTitle>
-              <CardDescription>
-                Choose a dataset to evaluate
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Select
-                  value={selectedDatasetId}
-                  onValueChange={setSelectedDatasetId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a dataset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {datasets.map((dataset) => (
-                      <SelectItem key={dataset.id} value={dataset.id}>
-                        <div className="flex items-center">
-                          <Database className="h-4 w-4 mr-2 text-muted-foreground" />
-                          {dataset.name}
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            ({dataset.conversations.length} conversations)
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedDatasetId && (
-                  <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="preview">
-                      <AccordionTrigger className="text-sm">
-                        <span className="flex items-center">
-                          <FileText className="h-4 w-4 mr-2" />
-                          Preview Dataset
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Dataset</CardTitle>
+            <CardDescription>
+              Choose a dataset to evaluate
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Select
+                value={selectedDatasetId}
+                onValueChange={setSelectedDatasetId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a dataset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>
+                      <div className="flex items-center">
+                        <Database className="h-4 w-4 mr-2 text-muted-foreground" />
+                        {dataset.name}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({dataset.conversations.length} conversations)
                         </span>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
-                          {datasets
-                            .find((d) => d.id === selectedDatasetId)
-                            ?.conversations.slice(0, 3)
-                            .map((conversation, i) => (
-                              <div
-                                key={conversation.id}
-                                className="text-sm border border-border rounded-md p-3"
-                              >
-                                <div className="font-medium mb-2">
-                                  Conversation {i + 1}
-                                </div>
-                                {conversation.messages
-                                  .slice(0, 2)
-                                  .map((message, j) => (
-                                    <div
-                                      key={j}
-                                      className={`p-2 rounded-md mb-2 ${
-                                        message.role === "user"
-                                          ? "bg-muted"
-                                          : "bg-secondary"
-                                      }`}
-                                    >
-                                      <div className="text-xs font-medium capitalize mb-1">
-                                        {message.role}
-                                      </div>
-                                      <div className="text-xs">
-                                        {message.content}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {conversation.messages.length > 2 && (
-                                  <div className="text-xs text-muted-foreground italic">
-                                    {conversation.messages.length - 2} more
-                                    messages...
-                                  </div>
-                                )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {selectedDatasetId && (
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="preview">
+                    <AccordionTrigger className="text-sm">
+                      <span className="flex items-center">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Preview Dataset
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
+                        {datasets
+                          .find((d) => d.id === selectedDatasetId)
+                          ?.conversations.slice(0, 3)
+                          .map((conversation, i) => (
+                            <div
+                              key={conversation.id}
+                              className="text-sm border border-border rounded-md p-3"
+                            >
+                              <div className="font-medium mb-2">
+                                Conversation {i + 1}
                               </div>
-                            ))}
-                          <div className="text-xs text-center text-muted-foreground py-2">
-                            Showing 3 of{" "}
-                            {datasets.find((d) => d.id === selectedDatasetId)
-                              ?.conversations.length || 0}{" "}
-                            conversations
-                          </div>
+                              {conversation.messages
+                                .slice(0, 2)
+                                .map((message, j) => (
+                                  <div
+                                    key={j}
+                                    className={`p-2 rounded-md mb-2 ${
+                                      message.role === "user"
+                                        ? "bg-muted"
+                                        : "bg-secondary"
+                                    }`}
+                                  >
+                                    <div className="text-xs font-medium capitalize mb-1">
+                                      {message.role}
+                                    </div>
+                                    <div className="text-xs">
+                                      {message.content}
+                                    </div>
+                                  </div>
+                                ))}
+                              {conversation.messages.length > 2 && (
+                                <div className="text-xs text-muted-foreground italic">
+                                  {conversation.messages.length - 2} more
+                                  messages...
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        <div className="text-xs text-center text-muted-foreground py-2">
+                          Showing 3 of{" "}
+                          {datasets.find((d) => d.id === selectedDatasetId)
+                            ?.conversations.length || 0}{" "}
+                          conversations
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Parameters</CardTitle>
-              <CardDescription>
-                Choose the parameters to evaluate against
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {parameters.map((parameter) => (
-                  <div
-                    key={parameter.id}
-                    className="flex items-start space-x-3 py-2"
-                  >
-                    <Checkbox
-                      id={parameter.id}
-                      checked={selectedParameterIds.includes(parameter.id)}
-                      onCheckedChange={() => toggleParameter(parameter.id)}
-                    />
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor={parameter.id}
-                        className="font-medium cursor-pointer"
-                      >
-                        {parameter.name}
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        {parameter.description}
-                      </p>
-                    </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Parameters</CardTitle>
+            <CardDescription>
+              Choose the parameters to evaluate against
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {parameters.map((parameter) => (
+                <div
+                  key={parameter.id}
+                  className="flex items-start space-x-3 py-2"
+                >
+                  <Checkbox
+                    id={parameter.id}
+                    checked={selectedParameterIds.includes(parameter.id)}
+                    onCheckedChange={() => toggleParameter(parameter.id)}
+                  />
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor={parameter.id}
+                      className="font-medium cursor-pointer"
+                    >
+                      {parameter.name}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {parameter.description}
+                    </p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex justify-end space-x-4">
-            <Button
-              variant="outline"
-              onClick={() => navigate(`/projects/${projectId}/evaluation`)}
-              type="button"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-primary hover:bg-orygin-red-hover text-white"
-              disabled={isLoading}
-            >
-              {isLoading ? "Creating..." : "Create Experiment"}
-            </Button>
-          </div>
-        </form>
-      )}
+        <div className="flex justify-end space-x-4">
+          <Button
+            variant="outline"
+            onClick={() => setShowForm(false)}
+            type="button"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className="bg-primary hover:bg-orygin-red-hover text-white"
+            disabled={isLoading}
+          >
+            {isLoading ? "Creating..." : "Create Experiment"}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 };
