@@ -1,160 +1,122 @@
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Project, projectApi } from "@/services/api";
-import { toast } from "@/components/ui/sonner";
+import React, { createContext, useContext, useState, ReactNode } from "react";
+import { api } from "@/services/api";
 
-interface ProjectContextType {
-  currentProject: Project | null;
+export type Project = {
+  id: string;
+  name: string;
+  api_key: string;
+  test_endpoint: string;
+  created_at: string;
+};
+
+type ProjectContextType = {
   projects: Project[];
+  currentProject: Project | null;
   isLoading: boolean;
-  error: string | null;
   fetchProjects: () => Promise<void>;
   fetchProject: (id: string) => Promise<void>;
   createProject: (data: Omit<Project, "id" | "created_at">) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
-}
+};
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();
-
-  // Load project data if a projectId is provided in the URL
-  useEffect(() => {
-    if (projectId) {
-      fetchProject(projectId);
-    }
-  }, [projectId]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const fetchProjects = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      // In a real app, this would fetch from API
-      // For demo, use mock data
-      const fetchedProjects = await projectApi.getProjects();
-      setProjects(fetchedProjects.length > 0 ? fetchedProjects : projectApi.mockData.createMockProjects());
-    } catch (err) {
-      setError("Failed to fetch projects");
-      console.error(err);
+      const data = await api.getProjects();
+      setProjects(data);
+    } catch (error) {
+      console.error("Failed to fetch projects:", error);
+      // Use sample data for demonstration
+      setProjects([
+        {
+          id: "1",
+          name: "Demo Project",
+          api_key: "sk-demo1234567890",
+          test_endpoint: "https://api.example.com/v1",
+          created_at: new Date().toISOString(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const fetchProject = async (id: string) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      // In a real app, this would fetch from API
-      const project = await projectApi.getProject(id);
-      setCurrentProject(project);
-    } catch (err) {
-      setError("Failed to fetch project");
-      console.error(err);
+      const data = await api.getProject(id);
+      setCurrentProject(data);
+    } catch (error) {
+      console.error(`Failed to fetch project ${id}:`, error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const createProject = async (data: Omit<Project, "id" | "created_at">) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // In a real app, this would send to API
-      const newProject = await projectApi.createProject(data);
-      
+      const newProject = await api.createProject(data);
       setProjects((prev) => [...prev, newProject]);
-      setCurrentProject(newProject);
-      toast.success("Project created successfully");
-      
       return newProject;
-    } catch (err) {
-      setError("Failed to create project");
-      toast.error("Failed to create project");
-      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
   const updateProject = async (id: string, data: Partial<Project>) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // In a real app, this would send to API
-      const updatedProject = await projectApi.updateProject(id, data);
-      
-      setProjects((prev) => 
+      const updatedProject = await api.updateProject(id, data);
+      setProjects((prev) =>
         prev.map((p) => (p.id === id ? updatedProject : p))
       );
-      
       if (currentProject?.id === id) {
         setCurrentProject(updatedProject);
       }
-      
-      toast.success("Project updated successfully");
       return updatedProject;
-    } catch (err) {
-      setError("Failed to update project");
-      toast.error("Failed to update project");
-      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
   const deleteProject = async (id: string) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // In a real app, this would call API
-      await projectApi.deleteProject(id);
-      
+      await api.deleteProject(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
-      
       if (currentProject?.id === id) {
         setCurrentProject(null);
-        navigate("/projects");
       }
-      
-      toast.success("Project deleted successfully");
-    } catch (err) {
-      setError("Failed to delete project");
-      toast.error("Failed to delete project");
-      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
+  const value = {
+    projects,
+    currentProject,
+    isLoading,
+    fetchProjects,
+    fetchProject,
+    createProject,
+    updateProject,
+    deleteProject,
+  };
+
   return (
-    <ProjectContext.Provider
-      value={{
-        currentProject,
-        projects,
-        isLoading,
-        error,
-        fetchProjects,
-        fetchProject,
-        createProject,
-        updateProject,
-        deleteProject,
-      }}
-    >
-      {children}
-    </ProjectContext.Provider>
+    <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
-};
+}
 
 export const useProject = () => {
   const context = useContext(ProjectContext);
