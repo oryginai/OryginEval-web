@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, ReactNode } from "react";
-import { api } from "@/services/api";
+import { projectApi } from "@/services/api";
 
 export type Project = {
   id: string;
@@ -31,7 +31,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const data = await api.getProjects();
+      const data = await projectApi.getProjects();
       setProjects(data);
     } catch (error) {
       console.error("Failed to fetch projects:", error);
@@ -53,7 +53,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const fetchProject = async (id: string) => {
     setIsLoading(true);
     try {
-      const data = await api.getProject(id);
+      const data = await projectApi.getProject(id);
       setCurrentProject(data);
     } catch (error) {
       console.error(`Failed to fetch project ${id}:`, error);
@@ -65,7 +65,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const createProject = async (data: Omit<Project, "id" | "created_at">) => {
     setIsLoading(true);
     try {
-      const newProject = await api.createProject(data);
+      const newProject = await projectApi.createProject(data);
       setProjects((prev) => [...prev, newProject]);
       return newProject;
     } finally {
@@ -76,7 +76,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const updateProject = async (id: string, data: Partial<Project>) => {
     setIsLoading(true);
     try {
-      const updatedProject = await api.updateProject(id, data);
+      const updatedProject = await projectApi.updateProject(id, data);
       setProjects((prev) =>
         prev.map((p) => (p.id === id ? updatedProject : p))
       );
@@ -92,7 +92,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const deleteProject = async (id: string) => {
     setIsLoading(true);
     try {
-      await api.deleteProject(id);
+      await projectApi.deleteProject(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
       if (currentProject?.id === id) {
         setCurrentProject(null);
