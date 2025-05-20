@@ -1,0 +1,62 @@
+
+API ENDPOINTS USED IN ORYGIN EVAL:
+
+1. Authentication
+   - POST /api/auth/google - Login with Google
+   - GET /api/auth/logout - Logout user
+   - GET /api/auth/user - Get current user
+
+2. Projects
+   - GET /api/projects - List all projects
+   - GET /api/projects/:id - Get project by ID
+   - POST /api/projects - Create a new project
+   - PUT /api/projects/:id - Update project
+   - DELETE /api/projects/:id - Delete project
+
+3. Datasets
+   - GET /api/projects/:projectId/datasets - List datasets
+   - GET /api/projects/:projectId/datasets/:id - Get dataset by ID
+   - POST /api/projects/:projectId/datasets - Create empty dataset
+   - POST /api/projects/:projectId/datasets/synthesize - Create dataset from sample conversations
+   - POST /api/projects/:projectId/datasets/upload - Upload custom dataset
+   - PUT /api/projects/:projectId/datasets/:id - Update dataset
+   - DELETE /api/projects/:projectId/datasets/:id - Delete dataset
+
+4. Parameters
+   - GET /api/projects/:projectId/parameters - List parameters
+   - GET /api/projects/:projectId/parameters/:id - Get parameter by ID
+   - POST /api/projects/:projectId/parameters - Create new parameter
+   - PUT /api/projects/:projectId/parameters/:id - Update parameter
+   - DELETE /api/projects/:projectId/parameters/:id - Delete parameter
+
+5. Experiments
+   - GET /api/projects/:projectId/experiments - List experiments
+   - GET /api/projects/:projectId/experiments/:id - Get experiment by ID
+   - POST /api/projects/:projectId/experiments - Create new experiment
+   - GET /api/projects/:projectId/experiments/:id/results - Get experiment results
+
+API REQUEST PARAMETERS:
+
+1. Create Project
+   - name (string): Project name
+   - api_key (string): API key for the LLM service
+   - test_endpoint (string): Endpoint URL for the LLM API
+
+2. Create/Synthesize Dataset
+   - name (string): Dataset name
+   - conversations (array): Sample conversations for synthesis
+     - Each conversation contains messages with role ("user" or "assistant") and content
+
+3. Upload Dataset
+   - name (string): Dataset name
+   - conversations (array): Conversation data to upload
+     - Each conversation must have id and messages array
+
+4. Create Parameter
+   - name (string): Parameter name
+   - description (string): Description of what this parameter evaluates
+
+5. Create Experiment
+   - name (string): Experiment name
+   - dataset_id (string): ID of the dataset to use
+   - parameter_ids (array): IDs of parameters to evaluate against
