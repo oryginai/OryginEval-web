@@ -15,8 +15,12 @@ Frontend changes:
 
 
 -- Quick experiment -> Information about synthesis
-default parameters
+-- default parameters
+-- cost calc
 sythesize dataset, leading to where
 json content
 report page
-cost calc
+DASHBOARD PAGE 
+
+
+API LINKING

@@ -7,6 +7,7 @@ import { useProject } from "@/contexts/ProjectContext";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { mockData } from "@/services/api";
 import {
   Card,
@@ -32,18 +33,23 @@ const Home: React.FC = () => {
   const { currentProject } = useProject();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [showCreateFlow, setShowCreateFlow] = useState(false);  const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
+  const [showCreateFlow, setShowCreateFlow] = useState(false);
+  const [priceQuoted, setPriceQuoted] = useState(false);
+  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
+  const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
-  const [botInstructions, setBotInstructions] = useState("");
-  const [parameters, setParameters] = useState([
-    { id: "param-1", name: "Response Quality", description: "Evaluates the overall quality of the response" }
-  ]);
-  // Start the experiment creation flow
+  const [botInstructions, setBotInstructions] = useState("");const [parameters, setParameters] = useState([
+    { id: "param-1", name: "Response Quality", description: "Evaluates the overall quality and helpfulness of the response", selected: true },
+    { id: "param-2", name: "Factual Accuracy", description: "Assesses whether the response contains factually correct information", selected: true },
+    { id: "param-3", name: "Instruction Following", description: "Evaluates how well the assistant follows user instructions", selected: true }
+  ]);  // Start the experiment creation flow
   const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
     setBotInstructions("");
+    setPriceQuoted(false);
+    setEstimatedPrice(null);
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
@@ -84,12 +90,11 @@ const Home: React.FC = () => {
     const updatedConversations = sampleConversations.filter((_, i) => i !== index);
     setSampleConversations(updatedConversations);
   };
-
   // Add a new parameter
   const addParameter = () => {
     setParameters([
       ...parameters,
-      { id: `param-${parameters.length + 1}`, name: "", description: "" }
+      { id: `param-${parameters.length + 1}`, name: "", description: "", selected: false }
     ]);
   };
 
@@ -99,10 +104,16 @@ const Home: React.FC = () => {
     updatedParameters[index][field] = value;
     setParameters(updatedParameters);
   };
-
   // Remove a parameter
   const removeParameter = (index: number) => {
     const updatedParameters = parameters.filter((_, i) => i !== index);
+    setParameters(updatedParameters);
+  };
+  
+  // Toggle parameter selection
+  const toggleParameter = (index: number) => {
+    const updatedParameters = [...parameters];
+    updatedParameters[index].selected = !updatedParameters[index].selected;
     setParameters(updatedParameters);
   };
 
@@ -132,15 +143,23 @@ const Home: React.FC = () => {
       }, 500);
     } else if (step === 1) {
       // Validate selected conversations (all are selected by default)
-      setStep(2);
-    } else if (step === 2) {
+      setStep(2);    } else if (step === 2) {
       // Validate parameters
-      const isValid = parameters.every(param => 
+      const customParameters = parameters.slice(3); // Skip the default parameters
+      const isValid = customParameters.every(param => 
         param.name.trim().length > 0 && param.description.trim().length > 0
       );
       
+      // Check if at least one parameter is selected
+      const hasSelectedParam = parameters.some(param => param.selected);
+      
       if (!isValid) {
         alert("Please fill in all parameter names and descriptions");
+        return;
+      }
+      
+      if (!hasSelectedParam) {
+        alert("Please select at least one parameter");
         return;
       }
       
@@ -336,66 +355,142 @@ const Home: React.FC = () => {
           </div>
         </div>
       )}
-      
-      {step === 2 && (
+        {step === 2 && (
         <div className="space-y-6">
           <p className="text-muted-foreground">
-            Define the parameters that will be used to evaluate the conversations. Each parameter should have a name and description.
+            Define the parameters that will be used to evaluate the conversations. Select which parameters you want to include in this experiment.
           </p>
           
-          <div className="space-y-4">
-            {parameters.map((param, i) => (
-              <div key={param.id} className="orygin-card p-4 relative">
-                <div className="absolute top-2 right-2">
-                  {parameters.length > 1 && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeParameter(i)}
-                    >
-                      ×
-                    </Button>
-                  )}
-                </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Parameters</CardTitle>
+              <CardDescription>
+                Choose the parameters to evaluate against
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Default parameters (first 3) cannot be edited or removed */}
+                {parameters.slice(0, 3).map((param, i) => (
+                  <div
+                    key={param.id}
+                    className="flex items-start space-x-3 py-2"
+                  >
+                    <Checkbox
+                      id={param.id}
+                      checked={param.selected}
+                      onCheckedChange={() => toggleParameter(i)}
+                      disabled={true} // Default parameters are always selected
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor={param.id}
+                        className="font-medium cursor-pointer"
+                      >
+                        {param.name}
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        {param.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
                 
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor={`param-name-${i}`}>Parameter Name</Label>
-                    <Input
-                      id={`param-name-${i}`}
-                      value={param.name}
-                      onChange={(e) => updateParameter(i, "name", e.target.value)}
-                      placeholder="e.g., Response Quality"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`param-desc-${i}`}>Description</Label>
-                    <Textarea
-                      id={`param-desc-${i}`}
-                      value={param.description}
-                      onChange={(e) => updateParameter(i, "description", e.target.value)}
-                      placeholder="Describe what this parameter evaluates..."
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
+                {/* Custom parameters (after the first 3) can be edited and removed */}
+                {parameters.slice(3).map((param, i) => {
+                  const actualIndex = i + 3;
+                  return (
+                    <div key={param.id} className="orygin-card p-4 relative">
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          id={param.id}
+                          checked={param.selected}
+                          onCheckedChange={() => toggleParameter(actualIndex)}
+                        />
+                        <div className="space-y-3 flex-1">
+                          <div>
+                            <Label htmlFor={`param-name-${i}`}>Parameter Name</Label>
+                            <Input
+                              id={`param-name-${i}`}
+                              value={param.name}
+                              onChange={(e) => updateParameter(actualIndex, "name", e.target.value)}
+                              placeholder="e.g., Response Quality"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`param-desc-${i}`}>Description</Label>
+                            <Textarea
+                              id={`param-desc-${i}`}
+                              value={param.description}
+                              onChange={(e) => updateParameter(actualIndex, "description", e.target.value)}
+                              placeholder="Describe what this parameter evaluates..."
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeParameter(actualIndex)}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+                <Button 
+                variant="outline" 
+                onClick={addParameter}
+                className="w-full border-dashed mt-4"
+              >
+                Add Another Parameter
+              </Button>
+            </CardContent>
+          </Card>
           
-          <Button 
-            variant="outline" 
-            onClick={addParameter}
-            className="w-full border-dashed"
-          >
-            Add Another Parameter
-          </Button>
+          {/* Estimated Price Section */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Estimated Price</CardTitle>
+              <CardDescription>
+                Get a price estimate for running this experiment
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col space-y-4">
+                {estimatedPrice !== null ? (
+                  <div className="rounded-md bg-muted p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Total Estimated Cost:</span>
+                      <span className="text-xl font-bold">${estimatedPrice.toFixed(2)}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      This estimate is based on the selected parameters and the number of conversations in your dataset.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <Button 
+                      onClick={() => {
+                        setEstimatedPrice(100);
+                        setPriceQuoted(true);
+                      }}
+                      className="bg-primary hover:bg-orygin-red-hover text-white"
+                    >
+                      Get Quote
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
-      
-      <div className="flex justify-between py-4">
+        <div className="flex justify-between py-4">
         {step > 0 ? (
           <Button variant="outline" onClick={handleBack}>
             Back
@@ -405,7 +500,11 @@ const Home: React.FC = () => {
         )}
         <Button
           onClick={handleNext}
-          className="bg-primary hover:bg-orygin-red-hover text-white"
+          className={step === 2 && !priceQuoted 
+            ? "bg-muted text-muted-foreground cursor-not-allowed" 
+            : "bg-primary hover:bg-orygin-red-hover text-white"
+          }
+          disabled={step === 2 && !priceQuoted}
         >
           {step === 2 ? "Create Experiment" : "Next"}
         </Button>
