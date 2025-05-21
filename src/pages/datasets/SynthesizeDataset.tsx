@@ -84,7 +84,6 @@ const SynthesizeDataset: React.FC = () => {
       setSampleConversations(updatedConversations);
     }
   };
-
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,8 +109,18 @@ const SynthesizeDataset: React.FC = () => {
       // In a real app, this would call the API to synthesize the dataset
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      toast.success("Dataset synthesized successfully");
-      navigate(`/projects/${projectId}/datasets`);
+      toast.success(`Dataset "${datasetName}" created successfully`);
+      setShowForm(false);
+      setDatasetName("");
+      setSampleConversations([
+        { 
+          id: `sample-${Date.now()}`, 
+          messages: [
+            { role: "user", content: "" }, 
+            { role: "assistant", content: "" }
+          ] 
+        }
+      ]);
     } catch (error) {
       console.error("Error synthesizing dataset:", error);
       toast.error("Failed to synthesize dataset");

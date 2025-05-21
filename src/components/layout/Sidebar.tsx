@@ -42,13 +42,12 @@ export const Sidebar: React.FC = () => {
         title: "Home",
         icon: Home,
         path: `/projects/${projectId}/home`,
-      });
-
-      sections.push({
+      });      sections.push({
         title: "Datasets",
         icon: Database,
         path: `/projects/${projectId}/datasets`,
         subSections: [
+          { title: "All Datasets", path: `/projects/${projectId}/datasets` },
           { title: "Synthesize Dataset", path: `/projects/${projectId}/datasets/synthesize` },
           { title: "Upload Dataset", path: `/projects/${projectId}/datasets/upload` },
         ],

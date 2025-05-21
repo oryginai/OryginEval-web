@@ -131,13 +131,17 @@ const UploadDataset: React.FC = () => {
     }
     
     setIsLoading(true);
-    
-    try {
+      try {
       // In a real app, this would call the API to upload the dataset
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      toast.success("Dataset uploaded successfully");
-      navigate(`/projects/${projectId}/datasets`);
+      toast.success(`Dataset "${datasetName}" uploaded successfully`);
+      
+      // Reset the form
+      setDatasetName("");
+      setJsonContent("");
+      setFileName("");
+      setConversations([]);
     } catch (error) {
       console.error("Error uploading dataset:", error);
       toast.error("Failed to upload dataset");
@@ -225,13 +229,18 @@ const UploadDataset: React.FC = () => {
           )}
         </div>
         
-        <div className="flex justify-end space-x-4">
-          <Button 
-            variant="outline" 
-            onClick={() => navigate(`/projects/${projectId}/datasets`)}
+        <div className="flex justify-end space-x-4">          <Button 
+            variant="outline"
             type="button"
+            onClick={() => {
+              setDatasetName("");
+              setJsonContent("");
+              setFileName("");
+              setConversations([]);
+              setUploadError("");
+            }}
           >
-            Cancel
+            Reset
           </Button>
           <Button 
             type="submit"

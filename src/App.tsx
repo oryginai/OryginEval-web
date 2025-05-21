@@ -16,6 +16,7 @@ import Projects from "@/pages/Projects";
 import Home from "@/pages/Home";
 import SynthesizeDataset from "@/pages/datasets/SynthesizeDataset";
 import UploadDataset from "@/pages/datasets/UploadDataset";
+import AllDatasets from "@/pages/datasets/AllDatasets";
 import CreateExperiment from "@/pages/evaluation/CreateExperiment";
 import CreateParameters from "@/pages/evaluation/CreateParameters";
 import ExperimentHistory from "@/pages/evaluation/History";
@@ -34,10 +35,10 @@ const App = () => (
               {/* Public Routes */}
               <Route path="/auth" element={<Auth />} />
               
-              {/* Protected Routes */}
-              <Route element={<AppLayout />}>
+              {/* Protected Routes */}              <Route element={<AppLayout />}>
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/projects/:projectId/home" element={<Home />} />
+                <Route path="/projects/:projectId/datasets" element={<AllDatasets />} />
                 <Route path="/projects/:projectId/datasets/synthesize" element={<SynthesizeDataset />} />
                 <Route path="/projects/:projectId/datasets/upload" element={<UploadDataset />} />
                 <Route path="/projects/:projectId/evaluation/create-experiment" element={<CreateExperiment />} />

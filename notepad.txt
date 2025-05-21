@@ -17,8 +17,8 @@ Frontend changes:
 -- Quick experiment -> Information about synthesis
 -- default parameters
 -- cost calc
-sythesize dataset, leading to where
-json content
+-- sythesize dataset, leading to where
+-- json content
 report page
 DASHBOARD PAGE 
 
