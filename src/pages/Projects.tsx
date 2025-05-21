@@ -32,27 +32,28 @@ import {
 
 const Projects: React.FC = () => {
   const { projects, fetchProjects, createProject, deleteProject, isLoading } = useProject();
-  
-  const [newProject, setNewProject] = useState({
+    const [newProject, setNewProject] = useState({
     name: "",
-    api_key: "",
     test_endpoint: "",
   });
-  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchProjects();
   }, []);
-
   const handleCreateProject = async () => {
-    if (!newProject.name || !newProject.api_key || !newProject.test_endpoint) {
+    if (!newProject.name || !newProject.test_endpoint) {
       return;
     }
 
     try {
-      await createProject(newProject);
-      setNewProject({ name: "", api_key: "", test_endpoint: "" });
+      // Add a dummy API key or let the backend generate one
+      const projectData = {
+        ...newProject,
+        api_key: "", // Empty string or the backend can generate the API key
+      };
+      await createProject(projectData);
+      setNewProject({ name: "", test_endpoint: "" });
       setIsDialogOpen(false);
     } catch (error) {
       console.error("Failed to create project:", error);
@@ -102,15 +103,6 @@ const Projects: React.FC = () => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="api_key">API Key</Label>
-                <Input
-                  id="api_key"
-                  placeholder="sk-..."
-                  value={newProject.api_key}
-                  onChange={(e) => setNewProject({ ...newProject, api_key: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
                 <Label htmlFor="test_endpoint">API Endpoint</Label>
                 <Input
                   id="test_endpoint"
@@ -125,10 +117,9 @@ const Projects: React.FC = () => {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
-              </Button>
-              <Button
+              </Button>              <Button
                 onClick={handleCreateProject}
-                disabled={!newProject.name || !newProject.api_key || !newProject.test_endpoint}
+                disabled={!newProject.name || !newProject.test_endpoint}
                 className="bg-primary hover:bg-orygin-red-hover"
               >
                 Create
@@ -174,13 +165,9 @@ const Projects: React.FC = () => {
                 <CardDescription className="truncate">
                   Created on {formatDate(project.created_at)}
                 </CardDescription>
-              </CardHeader>
-              <CardContent>
+              </CardHeader>              <CardContent>
                 <div className="flex flex-col space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">API Key:</span>{" "}
-                    <span className="font-mono">{project.api_key.substring(0, 12)}...</span>
-                  </div>
+                  {/* No API key shown */}
                 </div>
               </CardContent>
               <CardFooter>

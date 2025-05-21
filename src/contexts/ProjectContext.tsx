@@ -16,7 +16,7 @@ type ProjectContextType = {
   isLoading: boolean;
   fetchProjects: () => Promise<void>;
   fetchProject: (id: string) => Promise<void>;
-  createProject: (data: Omit<Project, "id" | "created_at">) => Promise<Project>;
+  createProject: (data: Partial<Omit<Project, "id" | "created_at">>) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
 };
@@ -61,11 +61,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
-  const createProject = async (data: Omit<Project, "id" | "created_at">) => {
+  const createProject = async (data: Partial<Omit<Project, "id" | "created_at">>) => {
     setIsLoading(true);
     try {
-      const newProject = await projectApi.createProject(data);
+      // If API key is not provided, we'll let the backend generate one
+      const projectData = {
+        ...data,
+        api_key: data.api_key || `sk-${Math.random().toString(36).substring(2, 15)}`, // Generate a dummy key if not provided
+      };
+      
+      const newProject = await projectApi.createProject(projectData as Omit<Project, "id" | "created_at">);
       setProjects((prev) => [...prev, newProject]);
       return newProject;
     } finally {

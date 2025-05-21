@@ -1,5 +1,6 @@
 
 import { toast } from "@/components/ui/sonner";
+import { supabase } from '@/lib/supabase';
 
 // Base API URL - would be set from environment variables in a real app
 const API_BASE_URL = "/api";
@@ -90,8 +91,7 @@ async function apiRequest<T>(
 // Project-related API functions
 export const projectApi = {
   getProjects: () => apiRequest<Project[]>("/projects"),
-  getProject: (id: string) => apiRequest<Project>(`/projects/${id}`),
-  createProject: (data: Omit<Project, "id" | "created_at">) =>
+  getProject: (id: string) => apiRequest<Project>(`/projects/${id}`),  createProject: (data: Omit<Project, "id" | "created_at">) =>
     apiRequest<Project>("/projects", "POST", data),
   updateProject: (id: string, data: Partial<Project>) =>
     apiRequest<Project>(`/projects/${id}`, "PUT", data),
@@ -194,29 +194,64 @@ export const experimentApi = {
 
 // Authentication-related API functions
 export const authApi = {
-  loginWithGoogle: () => {
-    // In a real implementation, this would redirect to a Google OAuth flow
-    // For this mockup, we'll simulate a successful login
-    localStorage.setItem("auth_token", "mock_token");
-    localStorage.setItem("user", JSON.stringify({
-      id: "user_123",
-      name: "Demo User",
-      email: "demo@example.com",
-      avatar: "https://ui-avatars.com/api/?name=Demo+User&background=ff3d3d&color=fff"
-    }));
-    return Promise.resolve(true);
+  loginWithGoogle: async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/projects`
+        }
+      });
+      
+      if (error) {
+        console.error("Supabase Google OAuth error:", error);
+        throw error;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Login with Google failed:", error);
+      throw error;
+    }
   },
-  logout: () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");
-    return Promise.resolve(true);
+  logout: async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Logout error:", error);
+        throw error;
+      }
+      return true;
+    } catch (error) {
+      console.error("Logout failed:", error);
+      throw error;
+    }
   },
-  getCurrentUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? Promise.resolve(JSON.parse(user)) : Promise.resolve(null);
+  getCurrentUser: async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return null;
+      
+      return {
+        id: user.id,
+        name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        email: user.email as string,
+        avatar: user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.user_metadata?.full_name || 'User')}&background=ff3d3d&color=fff`
+      };
+    } catch (error) {
+      console.error("Get current user failed:", error);
+      return null;
+    }
   },
-  isAuthenticated: () => {
-    return Promise.resolve(!!localStorage.getItem("auth_token"));
+  isAuthenticated: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return !!session;
+    } catch (error) {
+      console.error("Authentication check failed:", error);
+      return false;
+    }
   }
 };
 

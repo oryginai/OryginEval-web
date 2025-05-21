@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "@/services/api";
 import { toast } from "@/components/ui/sonner";
+import { supabase } from "@/lib/supabase";
 
 interface User {
   id: string;
@@ -43,26 +44,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
 
+    // Initial auth check
     checkAuth();
-  }, []);
+    
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          const userData = await authApi.getCurrentUser();
+          setUser(userData);
+          setIsLoading(false);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setIsLoading(false);
+        }
+      }
+    );
 
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
   const login = async () => {
     try {
       setIsLoading(true);
-      const success = await authApi.loginWithGoogle();
-      if (success) {
-        const userData = await authApi.getCurrentUser();
-        setUser(userData);
-        navigate("/projects");
-        toast.success("Logged in successfully");
-      }
+      await authApi.loginWithGoogle();
+      // Note: The actual navigation will happen via the onAuthStateChange listener
+      // after the OAuth redirect completes, and we don't need to manually call navigate
+      // or set the user here because the redirectTo option in loginWithGoogle handles it
     } catch (error) {
+      setIsLoading(false);
       toast.error("Login failed", {
         description: "Please try again later.",
       });
       console.error("Login failed:", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -70,11 +86,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setIsLoading(true);
       await authApi.logout();
-      setUser(null);
+      // User state will be updated by the onAuthStateChange listener
       navigate("/auth");
       toast.success("Logged out successfully");
     } catch (error) {
       console.error("Logout failed:", error);
+      toast.error("Logout failed", {
+        description: "Please try again later.",
+      });
     } finally {
       setIsLoading(false);
     }
