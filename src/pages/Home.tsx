@@ -32,18 +32,18 @@ const Home: React.FC = () => {
   const { currentProject } = useProject();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [showCreateFlow, setShowCreateFlow] = useState(false);
-  const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
+  const [showCreateFlow, setShowCreateFlow] = useState(false);  const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
+  const [botInstructions, setBotInstructions] = useState("");
   const [parameters, setParameters] = useState([
     { id: "param-1", name: "Response Quality", description: "Evaluates the overall quality of the response" }
   ]);
-
   // Start the experiment creation flow
   const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
+    setBotInstructions("");
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
@@ -119,10 +119,11 @@ const Home: React.FC = () => {
         alert("Please fill in all conversation messages");
         return;
       }
-      
-      // Simulate API call to generate more conversations
+        // Simulate API call to generate more conversations
       setTimeout(() => {
         // Add some mock generated conversations
+        // In a real implementation, we would pass botInstructions to the API
+        console.log("Bot instructions:", botInstructions);
         setSampleConversations([
           ...sampleConversations,
           ...mockData.createMockConversations(5)
@@ -255,17 +256,34 @@ const Home: React.FC = () => {
               </div>
             ))}
           </div>
-          
-          <Button 
+            <Button 
             variant="outline" 
             onClick={addConversation}
             className="w-full border-dashed"
           >
             Add Another Conversation
           </Button>
+          
+          <div className="mt-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-md">Bot Instructions</CardTitle>
+                <CardDescription>
+                  Provide information about how the bot should respond to help synthesize relevant conversations
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  placeholder="e.g., 'The bot is supposed to answer in short paragraphs', 'The bot should provide code examples', etc."
+                  value={botInstructions}
+                  onChange={(e) => setBotInstructions(e.target.value)}
+                  className="min-h-20"
+                />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
-      
       {step === 1 && (
         <div className="space-y-6">
           <p className="text-muted-foreground">

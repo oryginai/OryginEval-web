@@ -14,7 +14,7 @@ Frontend changes:
 
 
 
-Quick experiment -> Information about synthesis
+-- Quick experiment -> Information about synthesis
 default parameters
 sythesize dataset, leading to where
 json content
