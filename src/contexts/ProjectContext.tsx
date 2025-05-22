@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, ReactNode } from "react";
 import { projectApi } from "@/services/api";
 
@@ -31,20 +30,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const data = await projectApi.getProjects();
-      setProjects(data);
+      // Using setProjects with a functional update to safely check current state
+      setProjects(currentProjects => {
+        if (currentProjects.length === 0) {
+          console.log("API call to fetch projects is currently disabled. Setting initial sample data as projects list is empty.");
+          return [
+            {
+              id: "1",
+              name: "Demo Project",
+              api_key: "sk-demo1234567890",
+              test_endpoint: "https://api.example.com/v1",
+              created_at: new Date().toISOString(),
+            },
+          ];
+        }
+        // If projects already exist, don't overwrite them with demo data in local-only mode.
+        console.log("Projects list already populated, fetchProjects (local-only) will not overwrite.");
+        return currentProjects;
+      });
     } catch (error) {
-      console.error("Failed to fetch projects:", error);
-      // Use sample data for demonstration
-      setProjects([
-        {
-          id: "1",
-          name: "Demo Project",
-          api_key: "sk-demo1234567890",
-          test_endpoint: "https://api.example.com/v1",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      // This catch is for errors during the setProjects logic or if any async ops were here
+      console.error("Error in fetchProjects (local-only mode):", error);
+      setProjects([]); // Fallback to empty list on error
     } finally {
       setIsLoading(false);
     }
@@ -64,15 +71,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const createProject = async (data: Partial<Omit<Project, "id" | "created_at">>) => {
     setIsLoading(true);
     try {
-      // If API key is not provided, we'll let the backend generate one
-      const projectData = {
+      const projectDataWithApiKey = {
         ...data,
-        api_key: data.api_key || `sk-${Math.random().toString(36).substring(2, 15)}`, // Generate a dummy key if not provided
+        api_key: data.api_key || `sk-local-${Math.random().toString(36).substring(2, 10)}`, // Ensure a local API key
       };
       
-      const newProject = await projectApi.createProject(projectData as Omit<Project, "id" | "created_at">);
-      setProjects((prev) => [...prev, newProject]);
-      return newProject;
+      // const newApiProject = await projectApi.createProject(projectDataWithApiKey as Omit<Project, "id" | "created_at">); // API call commented out
+
+      // Create a new project object locally
+      const newLocalProject: Project = {
+        id: `local-${Date.now().toString()}`,
+        name: projectDataWithApiKey.name!, // name is validated in Projects.tsx
+        test_endpoint: projectDataWithApiKey.test_endpoint!, // test_endpoint is validated in Projects.tsx
+        api_key: projectDataWithApiKey.api_key,
+        created_at: new Date().toISOString(),
+      };
+
+      setProjects((prevProjects) => [...prevProjects, newLocalProject]);
+      return newLocalProject;
+    } catch (error) {
+      // This catch block handles synchronous errors in the local creation process
+      console.error("Error in local project creation process:", error);
+      // UI-level toasts are handled in Projects.tsx, so no toast here for context errors.
+      throw error; // Re-throw to allow Projects.tsx to catch it if needed
     } finally {
       setIsLoading(false);
     }

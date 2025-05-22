@@ -109,7 +109,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 bg-sidebar border-r border-border flex-shrink-0 h-screen overflow-y-auto scrollbar-hide">
-      <div className="p-6 border-b border-border">
+      <div className="p-6 h-16 p border-b border-border">
         <h2 className="text-xl font-bold text-orygin-red">Orygin Eval</h2>
       </div>
 
@@ -123,8 +123,10 @@ export const Sidebar: React.FC = () => {
                     className={cn(
                       "flex items-center gap-3 w-full px-3 py-2 rounded-md text-left",
                       "hover:bg-sidebar-accent transition-colors",
-                      location.pathname.startsWith(section.path) &&
-                        "bg-sidebar-accent text-accent"
+                      // Modified condition for parent section highlighting
+                      location.pathname === section.path && !section.subSections.some(sub => location.pathname === sub.path) 
+                        ? "bg-sidebar-accent text-accent" 
+                        : "text-sidebar-foreground" // Ensure default color if not exactly active
                     )}
                     onClick={() => toggleSection(section.title)}
                   >
@@ -153,6 +155,7 @@ export const Sidebar: React.FC = () => {
                         <li key={subSection.title}>
                           <NavLink
                             to={subSection.path}
+                            end
                             className={({ isActive }) =>
                               cn(
                                 "flex items-center gap-3 px-3 py-2 rounded-md",

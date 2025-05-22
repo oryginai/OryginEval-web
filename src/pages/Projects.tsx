@@ -1,9 +1,9 @@
-
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
 import { useProject } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import {
   Dialog,
   DialogContent,
@@ -31,32 +31,44 @@ import {
 } from "@/components/ui/card";
 
 const Projects: React.FC = () => {
-  const { projects, fetchProjects, createProject, deleteProject, isLoading } = useProject();
-    const [newProject, setNewProject] = useState({
+  const { projects, fetchProjects, createProject, deleteProject, isLoading: contextIsLoading } = useProject();
+  const [newProject, setNewProject] = useState({
     name: "",
     test_endpoint: "",
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false); // Local state for dialog submission
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
+
   const handleCreateProject = async () => {
-    if (!newProject.name || !newProject.test_endpoint) {
+    const projectName = newProject.name.trim();
+    const endpoint = newProject.test_endpoint.trim();
+
+    if (!projectName || !endpoint) {
+      toast.error("Project name and API endpoint are required.");
       return;
     }
 
+    setIsSubmittingCreate(true);
     try {
-      // Add a dummy API key or let the backend generate one
       const projectData = {
-        ...newProject,
-        api_key: "", // Empty string or the backend can generate the API key
+        name: projectName,
+        test_endpoint: endpoint,
+        api_key: "", // Backend is expected to generate the API key
       };
       await createProject(projectData);
-      setNewProject({ name: "", test_endpoint: "" });
-      setIsDialogOpen(false);
+      toast.success("Project created successfully!");
+      setNewProject({ name: "", test_endpoint: "" }); // Reset form
+      setIsDialogOpen(false); // Close dialog
+      await fetchProjects(); // Refresh project list
     } catch (error) {
       console.error("Failed to create project:", error);
+      toast.error("Failed to create project. Please try again.");
+    } finally {
+      setIsSubmittingCreate(false);
     }
   };
 
@@ -115,21 +127,22 @@ const Projects: React.FC = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmittingCreate}>
                 Cancel
-              </Button>              <Button
+              </Button>
+              <Button
                 onClick={handleCreateProject}
-                disabled={!newProject.name || !newProject.test_endpoint}
-                className="bg-primary hover:bg-orygin-red-hover"
+                disabled={!newProject.name.trim() || !newProject.test_endpoint.trim() || isSubmittingCreate}
+                className="bg-primary hover:bg-orygin-red-hover text-white"
               >
-                Create
+                {isSubmittingCreate ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {isLoading ? (
+      {contextIsLoading && projects.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
           {[1, 2, 3].map((i) => (
             <div key={i} className="orygin-card animate-pulse">
@@ -165,7 +178,8 @@ const Projects: React.FC = () => {
                 <CardDescription className="truncate">
                   Created on {formatDate(project.created_at)}
                 </CardDescription>
-              </CardHeader>              <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="flex flex-col space-y-2">
                   {/* No API key shown */}
                 </div>
