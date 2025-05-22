@@ -1,7 +1,6 @@
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react"; // Added ChevronDown and ChevronRight
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/contexts/ProjectContext";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,26 +39,38 @@ const Home: React.FC = () => {
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
   const [botInstructions, setBotInstructions] = useState("");
-  const [parameters, setParameters] = useState([
+  const initialParameters = [
     {
       id: "param-1",
       name: "Semantic Similarity",
-      description: "Measures how closely the assistant's response matches the intended meaning or context of the user's message.",
-      selected: true
+      description: "Measures how closely the assistant\\\'s response matches the intended meaning or context of the user\\\'s message.",
+      selected: true,
+      isExpanded: false
     },
     {
       id: "param-2",
       name: "Hallucination",
       description: "Checks if the assistant generates information that is not supported by the input or is factually incorrect.",
-      selected: true
+      selected: true,
+      isExpanded: false
     },
     {
       id: "param-3",
       name: "Toxicity",
-      description: "Evaluates whether the assistant's response contains harmful, offensive, or inappropriate language.",
-      selected: true
+      description: "Evaluates whether the assistant\\\'s response contains harmful, offensive, or inappropriate language.",
+      selected: true,
+      isExpanded: false
+    },
+    {
+      id: "param-4", 
+      name: "Accuracy",
+      description: "Measures the factual correctness and relevance of the information provided.",
+      selected: true, 
+      isExpanded: true // "Accuracy" is expanded by default
     }
-  ]);
+  ];
+  const [parameters, setParameters] = useState(initialParameters);
+
   const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
@@ -69,6 +80,7 @@ const Home: React.FC = () => {
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
+    setParameters(initialParameters); // Reset parameters, "Accuracy" will be expanded as per initialParameters
   };
 
   // Add a new conversation sample
@@ -108,10 +120,18 @@ const Home: React.FC = () => {
   };
   // Add a new parameter
   const addParameter = () => {
-    setParameters([
-      ...parameters,
-      { id: `param-${parameters.length + 1}`, name: "", description: "", selected: false }
-    ]);
+    const newParamId = `param-${parameters.length + 1}`;
+    setParameters(
+      parameters.map(p => ({ ...p, isExpanded: false })).concat([
+        { 
+          id: newParamId, 
+          name: "", 
+          description: "", 
+          selected: true, 
+          isExpanded: true // New parameter is expanded by default
+        }
+      ])
+    );
   };
 
   // Update a parameter
@@ -131,6 +151,26 @@ const Home: React.FC = () => {
     const updatedParameters = [...parameters];
     updatedParameters[index].selected = !updatedParameters[index].selected;
     setParameters(updatedParameters);
+  };
+
+  // Toggle parameter expansion
+  const toggleParameterExpansion = (index: number) => {
+    const isCustomParameter = index >= 3;
+    if (!isCustomParameter) return; // Do nothing for default parameters
+
+    const isCurrentlyExpanded = parameters[index].isExpanded;
+
+    setParameters(parameters.map((param, i) => {
+      if (i < 3) return param; // Default parameters are untouched
+
+      if (i === index) {
+        return { ...param, isExpanded: !param.isExpanded };
+      } else {
+        // If we are expanding the current one, collapse others.
+        // If we are collapsing the current one, others remain as they are.
+        return { ...param, isExpanded: !isCurrentlyExpanded ? false : param.isExpanded };
+      }
+    }));
   };
 
   // Handle next step in the wizard
@@ -182,8 +222,8 @@ const Home: React.FC = () => {
       // In a real app, this would create the experiment and redirect to results
       setTimeout(() => {
         setShowCreateFlow(false);
-        // Navigate to the dashboard with a mock experiment ID
-        navigate(`/projects/${currentProject?.id}/dashboard/exp_1`);
+        // Navigate to the reports page with a mock experiment ID
+        navigate(`/projects/${currentProject?.id}/report`);
       }, 500);
     }
   };
@@ -415,45 +455,75 @@ const Home: React.FC = () => {
                 {/* Custom parameters (after the first 3) can be edited and removed */}
                 {parameters.slice(3).map((param, i) => {
                   const actualIndex = i + 3;
+                  // Determine if this parameter is the one currently being edited (last one or explicitly expanded)
+                  const isCurrentlyEditing = param.isExpanded;
+
                   return (
-                    <div key={param.id} className="orygin-card p-4 relative">
+                    <div key={param.id} className={`orygin-card p-4 relative ${isCurrentlyEditing ? 'expanded-parameter' : 'collapsed-parameter'}`}>
                       <div className="flex items-start space-x-3">
                         <Checkbox
                           id={param.id}
                           checked={param.selected}
                           onCheckedChange={() => toggleParameter(actualIndex)}
                         />
-                        <div className="space-y-3 flex-1">
+                        <div className="flex-1 space-y-1 cursor-pointer" onClick={() => toggleParameterExpansion(actualIndex)}>
+                          <div className="flex justify-between items-center">
+                            <Label
+                              htmlFor={param.id} // Keep this for accessibility, though click is on div
+                              className="font-medium"
+                            >
+                              {param.name || "New Parameter"}
+                            </Label>
+                            {/* Icon to indicate expandable/collapsible state */}
+                            {isCurrentlyEditing ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          {isCurrentlyEditing && (
+                            <p className="text-sm text-muted-foreground">
+                              {param.description || "(No description)"}
+                            </p>
+                          )}
+                        </div>
+                        {isCurrentlyEditing && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive self-start"
+                            onClick={(e) => { e.stopPropagation(); removeParameter(actualIndex); }}
+                          >
+                            ×
+                          </Button>
+                        )}
+                      </div>
+                      {isCurrentlyEditing && (
+                        <div className="mt-3 space-y-3 pl-7"> {/* Indent content when expanded */}
                           <div>
-                            <Label htmlFor={`param-name-${i}`}>Parameter Name</Label>
+                            <Label htmlFor={`param-name-${actualIndex}`}>Parameter Name</Label>
                             <Input
-                              id={`param-name-${i}`}
+                              id={`param-name-${actualIndex}`}
                               value={param.name}
                               onChange={(e) => updateParameter(actualIndex, "name", e.target.value)}
                               placeholder="e.g., Response Quality"
                               className="mt-1"
+                              onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to toggle expansion
                             />
                           </div>
                           <div>
-                            <Label htmlFor={`param-desc-${i}`}>Description</Label>
+                            <Label htmlFor={`param-desc-${actualIndex}`}>Description</Label>
                             <Textarea
-                              id={`param-desc-${i}`}
+                              id={`param-desc-${actualIndex}`}
                               value={param.description}
                               onChange={(e) => updateParameter(actualIndex, "description", e.target.value)}
                               placeholder="Describe what this parameter evaluates..."
                               className="mt-1"
+                              onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to toggle expansion
                             />
                           </div>
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeParameter(actualIndex)}
-                        >
-                          ×
-                        </Button>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

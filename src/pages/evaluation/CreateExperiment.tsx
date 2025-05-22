@@ -109,8 +109,8 @@ const CreateExperiment: React.FC = () => {
       
       toast.success("Experiment created successfully");
       
-      // Navigate to the dashboard with the new experiment id
-      navigate(`/projects/${projectId}/dashboard/exp_1`);
+      // Navigate to the report page with the new experiment id
+      navigate(`/projects/${projectId}/report/exp_1`);
     } catch (error) {
       console.error("Error creating experiment:", error);
       toast.error("Failed to create experiment");

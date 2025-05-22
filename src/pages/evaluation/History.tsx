@@ -66,10 +66,8 @@ const ExperimentHistory: React.FC = () => {
     switch (status) {
       case "completed":
         return <Check className="h-4 w-4 text-green-500" />;
-      case "pending":
-        return <Clock className="h-4 w-4 text-yellow-500" />;
       case "running":
-        return <AlertCircle className="h-4 w-4 text-primary" />;
+        return <Clock className="h-4 w-4 text-yellow-500" />;
       case "failed":
         return <AlertTriangle className="h-4 w-4 text-destructive" />;
       default:
@@ -96,10 +94,8 @@ const ExperimentHistory: React.FC = () => {
     switch (status) {
       case "completed":
         return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "pending":
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "running":
-        return "bg-primary/10 text-primary border-primary/20";
+        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "failed":
         return "bg-destructive/10 text-destructive border-destructive/20";
       default:

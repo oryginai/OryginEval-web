@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from "react";
 import { NavLink, useLocation, useParams } from "react-router-dom";
 import {
@@ -42,7 +41,9 @@ export const Sidebar: React.FC = () => {
         title: "Home",
         icon: Home,
         path: `/projects/${projectId}/home`,
-      });      sections.push({
+      });      
+      
+      sections.push({
         title: "Datasets",
         icon: Database,
         path: `/projects/${projectId}/datasets`,
@@ -62,11 +63,13 @@ export const Sidebar: React.FC = () => {
           { title: "Create Parameters", path: `/projects/${projectId}/evaluation/create-parameters` },
           { title: "History", path: `/projects/${projectId}/evaluation/history` },
         ],
-      });      sections.push({
-        title: "Dashboard",
-        icon: FileText,
-        path: `/projects/${projectId}/dashboard`,
-      });
+      });      
+      
+      // sections.push({
+      //   title: "Dashboard",
+      //   icon: FileText,
+      //   path: `/projects/${projectId}/dashboard`,
+      // });
       
       sections.push({
         title: "Report",
@@ -105,7 +108,7 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 bg-sidebar border-r border-border flex-shrink-0 h-screen overflow-y-auto">
+    <aside className="w-64 bg-sidebar border-r border-border flex-shrink-0 h-screen overflow-y-auto scrollbar-hide">
       <div className="p-6 border-b border-border">
         <h2 className="text-xl font-bold text-orygin-red">Orygin Eval</h2>
       </div>

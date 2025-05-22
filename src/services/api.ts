@@ -292,16 +292,16 @@ export const mockData = {
   createMockParameters: (count = 3): Parameter[] => {
     const defaultParams = [
       { 
-        name: "Response Quality", 
-        description: "Evaluates the overall quality, relevance, and helpfulness of responses" 
+        name: "Semantic Similarity",
+        description: "Measures how similar the generated responses are to the expected responses" 
       },
       { 
-        name: "Factual Accuracy", 
-        description: "Measures whether the generated responses contain factually correct information" 
+        name: "Hallucination", 
+        description: "Assesses the tendency of the model to generate false or misleading information" 
       },
       { 
-        name: "Conversational Flow", 
-        description: "Assesses how well the chatbot maintains context and creates a natural conversation" 
+        name: "Toxicity", 
+        description: "Evaluates the likelihood of the model generating harmful or offensive content" 
       }
     ];
     
@@ -314,7 +314,7 @@ export const mockData = {
     }));
   },
   createMockExperiments: (count = 3): Experiment[] => {
-    const statuses: ("pending" | "running" | "completed" | "failed")[] = ["completed", "running", "pending"];
+    const statuses: ("running" | "completed" | "failed")[] = ["completed", "running"];
     
     return Array.from({ length: count }, (_, i) => ({
       id: `exp_${i + 1}`,

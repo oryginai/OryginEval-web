@@ -54,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           const userData = await authApi.getCurrentUser();
           setUser(userData);
           setIsLoading(false);
+          console.log("Supabase user ID:", session.user.id);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setIsLoading(false);

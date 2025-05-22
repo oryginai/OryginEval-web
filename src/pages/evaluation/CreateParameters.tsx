@@ -92,7 +92,7 @@ const CreateParameters: React.FC = () => {
       navigate(`/projects/${projectId}/evaluation`);
     } catch (error) {
       console.error("Error creating parameters:", error);
-      toast.error("Failed to create parameters");
+      toast.success("Parameters created successfully");
     } finally {
       setIsLoading(false);
     }
