@@ -39,11 +39,27 @@ const Home: React.FC = () => {
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
-  const [botInstructions, setBotInstructions] = useState("");const [parameters, setParameters] = useState([
-    { id: "param-1", name: "Response Quality", description: "Evaluates the overall quality and helpfulness of the response", selected: true },
-    { id: "param-2", name: "Factual Accuracy", description: "Assesses whether the response contains factually correct information", selected: true },
-    { id: "param-3", name: "Instruction Following", description: "Evaluates how well the assistant follows user instructions", selected: true }
-  ]);  // Start the experiment creation flow
+  const [botInstructions, setBotInstructions] = useState("");
+  const [parameters, setParameters] = useState([
+    {
+      id: "param-1",
+      name: "Semantic Similarity",
+      description: "Measures how closely the assistant's response matches the intended meaning or context of the user's message.",
+      selected: true
+    },
+    {
+      id: "param-2",
+      name: "Hallucination",
+      description: "Checks if the assistant generates information that is not supported by the input or is factually incorrect.",
+      selected: true
+    },
+    {
+      id: "param-3",
+      name: "Toxicity",
+      description: "Evaluates whether the assistant's response contains harmful, offensive, or inappropriate language.",
+      selected: true
+    }
+  ]);
   const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
@@ -481,7 +497,7 @@ const Home: React.FC = () => {
                       }}
                       className="bg-primary hover:bg-orygin-red-hover text-white"
                     >
-                      Get Quote
+                      Estimate your cost
                     </Button>
                   </div>
                 )}

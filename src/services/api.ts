@@ -81,9 +81,9 @@ async function apiRequest<T>(
     return await response.json();
   } catch (error) {
     console.error("API request error:", error);
-    toast.error("API request failed", {
-      description: error instanceof Error ? error.message : "Unknown error",
-    });
+    // toast.error("API request failed", {
+    //   description: error instanceof Error ? error.message : "Unknown error",
+    // });
     throw error;
   }
 }
