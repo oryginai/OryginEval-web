@@ -21,6 +21,7 @@ import CreateExperiment from "@/pages/evaluation/CreateExperiment";
 import CreateParameters from "@/pages/evaluation/CreateParameters";
 import ExperimentHistory from "@/pages/evaluation/History";
 import Dashboard from "@/pages/Dashboard";
+import Report from "@/pages/Report";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,10 +43,10 @@ const App = () => (
                 <Route path="/projects/:projectId/datasets/synthesize" element={<SynthesizeDataset />} />
                 <Route path="/projects/:projectId/datasets/upload" element={<UploadDataset />} />
                 <Route path="/projects/:projectId/evaluation/create-experiment" element={<CreateExperiment />} />
-                <Route path="/projects/:projectId/evaluation/create-parameters" element={<CreateParameters />} />
-                <Route path="/projects/:projectId/evaluation/history" element={<ExperimentHistory />} />
+                <Route path="/projects/:projectId/evaluation/create-parameters" element={<CreateParameters />} />                <Route path="/projects/:projectId/evaluation/history" element={<ExperimentHistory />} />
                 <Route path="/projects/:projectId/dashboard" element={<Dashboard />} />
-                <Route path="/projects/:projectId/dashboard/:experimentId" element={<Dashboard />} />
+                <Route path="/projects/:projectId/report" element={<Report />} />
+                <Route path="/projects/:projectId/report/:experimentId" element={<Report />} />
               </Route>
               
               {/* Redirect to auth by default */}

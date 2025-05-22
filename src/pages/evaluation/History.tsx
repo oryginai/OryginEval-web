@@ -191,9 +191,8 @@ const ExperimentHistory: React.FC = () => {
                             <span className="sr-only">Open menu</span>
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/projects/${projectId}/dashboard/${experiment.id}`)}
+                        <DropdownMenuContent align="end">                          <DropdownMenuItem
+                            onClick={() => navigate(`/projects/${projectId}/report/${experiment.id}`)}
                           >
                             <ExternalLink className="mr-2 h-4 w-4" />
                             View Results

@@ -19,8 +19,14 @@ Frontend changes:
 -- cost calc
 -- sythesize dataset, leading to where
 -- json content
-report page
-DASHBOARD PAGE 
 
+
+
+Report page 
+Default parameters in database
+
+USER CREATION IN ACCOUNTS TABLE IN SUPABASE :(:
 
 API LINKING
+
+login signup button and working fix

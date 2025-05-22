@@ -62,12 +62,16 @@ export const Sidebar: React.FC = () => {
           { title: "Create Parameters", path: `/projects/${projectId}/evaluation/create-parameters` },
           { title: "History", path: `/projects/${projectId}/evaluation/history` },
         ],
-      });
-
-      sections.push({
+      });      sections.push({
         title: "Dashboard",
         icon: FileText,
         path: `/projects/${projectId}/dashboard`,
+      });
+      
+      sections.push({
+        title: "Report",
+        icon: BarChart3,
+        path: `/projects/${projectId}/report`,
       });
     }
 
