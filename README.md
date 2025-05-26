@@ -1,73 +1,101 @@
-# Welcome to your Lovable project
+# ORYGIN Eval
 
-## Project info
+A comprehensive evaluation platform for Large Language Models (LLMs) that enables researchers and developers to systematically test, analyze, and compare AI model performance across various datasets and parameters.
 
-**URL**: https://lovable.dev/projects/248c0eb8-aba3-4c16-a70a-749be51b4e46
+## Features
 
-## How can I edit this code?
+### Core Functionality
+- **Project Management**: Organize LLM evaluations into projects with dedicated API configurations
+- **Dataset Management**: 
+  - Upload custom datasets
+  - Synthesize datasets from sample conversations
+  - Manage multiple datasets per project
+- **Experiment Configuration**: Create and configure evaluation parameters
+- **Real-time Evaluation**: Run experiments and monitor results in real-time
+- **Results Analysis**: Comprehensive reporting and visualization of experiment outcomes
 
-There are several ways of editing your application.
+### User Interface
+- **Modern UI**: Built with React, TypeScript, and Tailwind CSS
+- **Responsive Design**: Works seamlessly across desktop and mobile devices
+- **Component Library**: Utilizes shadcn/ui for consistent, accessible components
 
-**Use Lovable**
+### Authentication & Storage
+- **Supabase Integration**: Secure authentication and data storage
+- **Google OAuth**: Easy sign-in with Google accounts
+- **Data Persistence**: All projects, datasets, and experiments are securely stored
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/248c0eb8-aba3-4c16-a70a-749be51b4e46) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React 18, TypeScript, Vite
+- **Styling**: Tailwind CSS, shadcn/ui components
+- **State Management**: React Context, TanStack Query
+- **Routing**: React Router DOM
+- **Authentication**: Supabase Auth
+- **Database**: Supabase (PostgreSQL)
+- **Charts**: Recharts
+- **Form Handling**: React Hook Form with Zod validation
+- **Development**: ESLint, TypeScript, Hot Module Replacement
 
-**Use your preferred IDE**
+## Project Structure
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+src/
+├── components/          # Reusable UI components
+│   ├── layout/         # Layout components (Header, Sidebar, etc.)
+│   └── ui/             # shadcn/ui components
+├── contexts/           # React contexts for state management
+├── hooks/              # Custom React hooks
+├── lib/                # Utility libraries and configurations
+├── pages/              # Main application pages
+│   ├── datasets/       # Dataset management pages
+│   └── evaluation/     # Experiment and evaluation pages
+└── services/           # API services and external integrations
 ```
 
-**Edit a file directly in GitHub**
+## Getting Started
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Prerequisites
 
-**Use GitHub Codespaces**
+- Node.js 18+ 
+- npm or yarn package manager
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Installation
 
-## What technologies are used for this project?
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/oryginai/OryginEval-web.git
+   cd OryginEval-web
+   ```
 
-This project is built with:
+2. **Install dependencies**
+   ```bash
+   npm i
+   ```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-## How can I deploy this project?
+   The application will be available at `http://localhost:8080`
 
-Simply open [Lovable](https://lovable.dev/projects/248c0eb8-aba3-4c16-a70a-749be51b4e46) and click on Share -> Publish.
 
-## Can I connect a custom domain to my Lovable project?
+## Contributing
 
-Yes, you can!
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## License
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+This project is part of the ORYGIN evaluation suite. Please refer to the license file for usage terms.
+
+## 🆘 Support
+
+For questions, issues, or feature requests, please open an issue on the GitHub repository or contact the development team.
+
+---
+
+**Built with ❤️ for the AI research community**
