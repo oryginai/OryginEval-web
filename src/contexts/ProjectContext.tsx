@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
-import { projectApi } from "@/services/api";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useCallback,
+} from 'react';
+import { ApiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
+import { useAuth } from './AuthContext';
 
 export type Project = {
   id: string;
@@ -15,7 +23,9 @@ type ProjectContextType = {
   isLoading: boolean;
   fetchProjects: () => Promise<void>;
   fetchProject: (id: string) => Promise<void>;
-  createProject: (data: Partial<Omit<Project, "id" | "created_at">>) => Promise<Project>;
+  createProject: (
+    data: Partial<Omit<Project, 'id' | 'created_at'>>,
+  ) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
 };
@@ -26,74 +36,70 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { user } = useAuth();
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Using setProjects with a functional update to safely check current state
-      setProjects(currentProjects => {
-        if (currentProjects.length === 0) {
-          console.log("API call to fetch projects is currently disabled. Setting initial sample data as projects list is empty.");
-          return [
-            {
-              id: "1",
-              name: "Demo Project",
-              api_key: "sk-demo1234567890",
-              test_endpoint: "https://api.example.com/v1",
-              created_at: new Date().toISOString(),
-            },
-          ];
-        }
-        // If projects already exist, don't overwrite them with demo data in local-only mode.
-        console.log("Projects list already populated, fetchProjects (local-only) will not overwrite.");
-        return currentProjects;
+      const res = await ApiClient.get<Project[]>('/projects-list', {
+        account_id: user?.id || '',
       });
+      if (res.data) {
+        setProjects(res.data);
+      } else {
+        toast.error(res.error?.message || 'Failed to fetch projects');
+        setProjects([]);
+      }
     } catch (error) {
-      // This catch is for errors during the setProjects logic or if any async ops were here
-      console.error("Error in fetchProjects (local-only mode):", error);
-      setProjects([]); // Fallback to empty list on error
+      console.error('Error in fetchProjects (local-only mode):', error);
+      setProjects([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const fetchProject = async (id: string) => {
     setIsLoading(true);
     try {
-      const data = await projectApi.getProject(id);
-      setCurrentProject(data);
+      const res = await ApiClient.get<Project>('/projects-details', {
+        project_id: id,
+      });
+      if (res.data) {
+        setCurrentProject(res.data);
+      } else {
+        toast.error(res.error?.message || 'Failed to fetch project');
+        setCurrentProject(null);
+      }
     } catch (error) {
       console.error(`Failed to fetch project ${id}:`, error);
     } finally {
       setIsLoading(false);
     }
   };
-  const createProject = async (data: Partial<Omit<Project, "id" | "created_at">>) => {
+  const createProject = async (
+    data: Partial<Omit<Project, 'id' | 'created_at'>>,
+  ) => {
     setIsLoading(true);
     try {
       const projectDataWithApiKey = {
         ...data,
-        api_key: data.api_key || `sk-local-${Math.random().toString(36).substring(2, 10)}`, // Ensure a local API key
-      };
-      
-      // const newApiProject = await projectApi.createProject(projectDataWithApiKey as Omit<Project, "id" | "created_at">); // API call commented out
-
-      // Create a new project object locally
-      const newLocalProject: Project = {
-        id: `local-${Date.now().toString()}`,
-        name: projectDataWithApiKey.name!, // name is validated in Projects.tsx
-        test_endpoint: projectDataWithApiKey.test_endpoint!, // test_endpoint is validated in Projects.tsx
-        api_key: projectDataWithApiKey.api_key,
-        created_at: new Date().toISOString(),
+        api_key:
+          data.api_key ||
+          `sk-local-${Math.random().toString(36).substring(2, 10)}`, // Ensure a local API key
       };
 
-      setProjects((prevProjects) => [...prevProjects, newLocalProject]);
-      return newLocalProject;
+      const res = await ApiClient.post<Project>(
+        `/projects-create?project_id=string&account_id=${user?.id || ''}`,
+        projectDataWithApiKey,
+      );
+      if (res.data) {
+        setProjects(prev => [...prev, res.data]);
+      } else {
+        toast.error(res.error?.message || 'Failed to create project');
+      }
+      return res.data;
     } catch (error) {
-      // This catch block handles synchronous errors in the local creation process
-      console.error("Error in local project creation process:", error);
-      // UI-level toasts are handled in Projects.tsx, so no toast here for context errors.
-      throw error; // Re-throw to allow Projects.tsx to catch it if needed
+      console.error('Error in local project creation process:', error);
     } finally {
       setIsLoading(false);
     }
@@ -102,14 +108,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const updateProject = async (id: string, data: Partial<Project>) => {
     setIsLoading(true);
     try {
-      const updatedProject = await projectApi.updateProject(id, data);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === id ? updatedProject : p))
+      const res = await ApiClient.put<Project>(
+        `/projects-update?project_id=${id}`,
+        data,
       );
-      if (currentProject?.id === id) {
-        setCurrentProject(updatedProject);
+      if (res.data) {
+        setProjects(prev => prev.map(p => (p.id === id ? res.data : p)));
+        if (currentProject?.id === id) {
+          setCurrentProject(res.data);
+        }
+      } else {
+        toast.error(res.error?.message || 'Failed to update project');
       }
-      return updatedProject;
+      return res.data;
     } finally {
       setIsLoading(false);
     }
@@ -118,10 +129,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const deleteProject = async (id: string) => {
     setIsLoading(true);
     try {
-      await projectApi.deleteProject(id);
-      setProjects((prev) => prev.filter((p) => p.id !== id));
-      if (currentProject?.id === id) {
-        setCurrentProject(null);
+      const res = await ApiClient.delete<Project>(
+        `/projects-delete?project_id=${id}`,
+      );
+      if (res.data) {
+        setProjects(prev => prev.filter(p => p.id !== id));
+        if (currentProject?.id === id) {
+          setCurrentProject(null);
+        }
+      } else {
+        toast.error(res.error?.message || 'Failed to delete project');
       }
     } finally {
       setIsLoading(false);
@@ -147,7 +164,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 export const useProject = () => {
   const context = useContext(ProjectContext);
   if (context === undefined) {
-    throw new Error("useProject must be used within a ProjectProvider");
+    throw new Error('useProject must be used within a ProjectProvider');
   }
   return context;
 };

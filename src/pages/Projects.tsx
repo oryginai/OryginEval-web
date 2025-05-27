@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Plus, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
-import { useProject } from "@/contexts/ProjectContext";
-import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/sonner";
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Plus, MoreVertical, ExternalLink, Trash2 } from 'lucide-react';
+import { useProject } from '@/contexts/ProjectContext';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/sonner';
 import {
   Dialog,
   DialogContent,
@@ -12,15 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import {
   Card,
   CardContent,
@@ -28,16 +28,23 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from '@/components/ui/card';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Projects: React.FC = () => {
-  const { projects, fetchProjects, createProject, deleteProject, isLoading: contextIsLoading } = useProject();
+  const {
+    projects,
+    fetchProjects,
+    createProject,
+    deleteProject,
+    isLoading: contextIsLoading,
+  } = useProject();
   const [newProject, setNewProject] = useState({
-    name: "",
-    test_endpoint: "",
+    name: '',
+    test_endpoint: '',
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false); // Local state for dialog submission
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -48,7 +55,7 @@ const Projects: React.FC = () => {
     const endpoint = newProject.test_endpoint.trim();
 
     if (!projectName || !endpoint) {
-      toast.error("Project name and API endpoint are required.");
+      toast.error('Project name and API endpoint are required.');
       return;
     }
 
@@ -57,16 +64,15 @@ const Projects: React.FC = () => {
       const projectData = {
         name: projectName,
         test_endpoint: endpoint,
-        api_key: "", // Backend is expected to generate the API key
+        api_key: '', // Backend is expected to generate the API key
       };
       await createProject(projectData);
-      toast.success("Project created successfully!");
-      setNewProject({ name: "", test_endpoint: "" }); // Reset form
-      setIsDialogOpen(false); // Close dialog
-      await fetchProjects(); // Refresh project list
+      setNewProject({ name: '', test_endpoint: '' });
+      setIsDialogOpen(false);
+      await fetchProjects();
     } catch (error) {
-      console.error("Failed to create project:", error);
-      toast.error("Failed to create project. Please try again.");
+      console.error('Failed to create project:', error);
+      toast.error('Failed to create project. Please try again.');
     } finally {
       setIsSubmittingCreate(false);
     }
@@ -89,7 +95,7 @@ const Projects: React.FC = () => {
             Manage your LLM evaluation projects
           </p>
         </div>
-        
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2 bg-primary hover:bg-orygin-red-hover text-white">
@@ -111,7 +117,9 @@ const Projects: React.FC = () => {
                   id="name"
                   placeholder="My Awesome Model"
                   value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                  onChange={e =>
+                    setNewProject({ ...newProject, name: e.target.value })
+                  }
                 />
               </div>
               <div className="grid gap-2">
@@ -120,22 +128,33 @@ const Projects: React.FC = () => {
                   id="test_endpoint"
                   placeholder="https://api.example.com/v1/chat/completions"
                   value={newProject.test_endpoint}
-                  onChange={(e) => 
-                    setNewProject({ ...newProject, test_endpoint: e.target.value })
+                  onChange={e =>
+                    setNewProject({
+                      ...newProject,
+                      test_endpoint: e.target.value,
+                    })
                   }
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmittingCreate}>
+              <Button
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isSubmittingCreate}
+              >
                 Cancel
               </Button>
               <Button
                 onClick={handleCreateProject}
-                disabled={!newProject.name.trim() || !newProject.test_endpoint.trim() || isSubmittingCreate}
+                disabled={
+                  !newProject.name.trim() ||
+                  !newProject.test_endpoint.trim() ||
+                  isSubmittingCreate
+                }
                 className="bg-primary hover:bg-orygin-red-hover text-white"
               >
-                {isSubmittingCreate ? "Creating..." : "Create"}
+                {isSubmittingCreate ? 'Creating...' : 'Create'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -144,7 +163,7 @@ const Projects: React.FC = () => {
 
       {contextIsLoading && projects.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3].map(i => (
             <div key={i} className="orygin-card animate-pulse">
               <div className="p-6 h-40"></div>
             </div>
@@ -152,7 +171,7 @@ const Projects: React.FC = () => {
         </div>
       ) : projects.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
+          {projects.map(project => (
             <Card key={project.id} className="overflow-hidden">
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
@@ -185,10 +204,7 @@ const Projects: React.FC = () => {
                 </div>
               </CardContent>
               <CardFooter>
-                <Link
-                  to={`/projects/${project.id}/home`}
-                  className="w-full"
-                >
+                <Link to={`/projects/${project.id}/home`} className="w-full">
                   <Button className="w-full gap-2 border border-border">
                     <ExternalLink className="h-4 w-4" />
                     Open Project
