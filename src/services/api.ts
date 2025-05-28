@@ -1,5 +1,4 @@
 import { toast } from '@/components/ui/sonner';
-import { supabase } from '@/lib/supabase';
 
 // Base API URL - would be set from environment variables in a real app
 const API_BASE_URL = '/api';
@@ -182,76 +181,6 @@ export const experimentApi = {
     apiRequest<ExperimentResults>(
       `/projects/${projectId}/experiments/${experimentId}/results`,
     ),
-};
-
-// Authentication-related API functions
-export const authApi = {
-  loginWithGoogle: async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/projects`,
-        },
-      });
-
-      if (error) {
-        console.error('Supabase Google OAuth error:', error);
-        throw error;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Login with Google failed:', error);
-      throw error;
-    }
-  },
-  logout: async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Logout error:', error);
-        throw error;
-      }
-      return true;
-    } catch (error) {
-      console.error('Logout failed:', error);
-      throw error;
-    }
-  },
-  getCurrentUser: async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return null;
-
-      return {
-        id: user.id,
-        name:
-          user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-        email: user.email as string,
-        avatar:
-          user.user_metadata?.avatar_url ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            user.user_metadata?.full_name || 'User',
-          )}&background=ff3d3d&color=fff`,
-      };
-    } catch (error) {
-      console.error('Get current user failed:', error);
-      return null;
-    }
-  },
-  isAuthenticated: async () => {
-    try {
-      const { data } = await supabase.auth.getUser();
-      return !!data.user;
-    } catch (error) {
-      console.error('Authentication check failed:', error);
-      return false;
-    }
-  },
 };
 
 // Mock data functions - these would be removed in a real implementation
