@@ -30,10 +30,12 @@ import { Plus, FileText, Database } from "lucide-react";
 import { Dataset, Parameter } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
+import { useProject } from "@/contexts/ProjectContext";
 
 const CreateExperiment: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
+  const { currentProject } = useProject();
     const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -139,13 +141,15 @@ const CreateExperiment: React.FC = () => {
     try {
       // Generate a unique experiment ID
       const experimentId = uuidv4();
-      
-      // Prepare the request payload
+        // Prepare the request payload
       const payload = {
         experiment_name: experimentName,
         dataset_id: selectedDatasetId,
         parameter_ids: selectedParameterIds,
-        labrat_json: {} // Empty object as per API spec
+        labrat_json: { 
+          endpoint: currentProject?.labrat_json?.endpoint || '',
+          headers: currentProject?.labrat_json?.headers || {}
+        }
       };
       
       console.log("Creating experiment with payload:", payload);

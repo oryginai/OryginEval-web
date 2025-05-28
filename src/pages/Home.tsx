@@ -384,7 +384,7 @@ const Home: React.FC = () => {
           `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
           {
             sample_data: sampleData,
-            num_samples: 5,
+            num_samples: 3,
             extra_info: botInstructions
           }
         );
@@ -461,7 +461,10 @@ const Home: React.FC = () => {
           experiment_name: `Quick Experiment ${new Date().toLocaleDateString()}`,
           dataset_id: datasetId,
           parameter_ids: selectedParameterIds,
-          labrat_json: {}
+          labrat_json: { 
+            endpoint: currentProject?.labrat_json?.endpoint || '',
+            headers: currentProject?.labrat_json?.headers || {}
+          }
         };
         
         console.log("Creating quick experiment with payload:", payload);
