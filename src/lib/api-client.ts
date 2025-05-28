@@ -5,42 +5,45 @@ export class ApiClient {
   private static baseURL = '/api';
 
   /**
-   * Get authentication headers with Supabase session token
+   * Get authentication headers with current session token
    */
   private static async getAuthHeaders(): Promise<HeadersInit> {
     try {
+      console.log('[API_CLIENT] Getting auth headers...');
+      
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
-        console.error('Failed to get session for API request:', error.message);
-        return {};
+        console.error('[API_CLIENT] Session error:', error);
+        return { 'Content-Type': 'application/json' };
       }
 
       if (!session?.access_token) {
-        console.warn('No access token available for API request');
-        return {};
+        console.warn('[API_CLIENT] No access token available');
+        return { 'Content-Type': 'application/json' };
       }
 
+      console.log('[API_CLIENT] Auth headers retrieved successfully');
       return {
         'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       };
     } catch (error) {
-      console.error('Error getting auth headers:', error);
-      return {
-        'Content-Type': 'application/json',
-      };
+      console.error('[API_CLIENT] Error getting auth headers:', error);
+      return { 'Content-Type': 'application/json' };
     }
   }
 
   /**
-   * Make authenticated API request
+   * Make authenticated API request with comprehensive error handling
    */
   private static async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     try {
+      console.log('[API_CLIENT] Making request to:', endpoint);
+      
       const headers = await this.getAuthHeaders();
       
       const response = await fetch(`${this.baseURL}${endpoint}`, {
@@ -51,27 +54,35 @@ export class ApiClient {
         },
       });
 
-      // Handle authentication errors
+      // Handle different response statuses
       if (response.status === 401) {
-        console.error('API request unauthorized - user may need to re-authenticate');
-        // Could trigger a re-authentication flow here
+        console.error('[API_CLIENT] Unauthorized request - authentication required');
         throw new Error('Authentication required');
+      }
+
+      if (response.status === 403) {
+        console.error('[API_CLIENT] Forbidden request - insufficient permissions');
+        throw new Error('Insufficient permissions');
       }
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('[API_CLIENT] Request failed:', response.status, errorText);
         throw new Error(`API request failed: ${response.status} ${errorText}`);
       }
 
-      // Handle empty responses
+      // Handle response parsing
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        return await response.json();
+        const data = await response.json();
+        console.log('[API_CLIENT] Request successful');
+        return data;
       } else {
+        console.log('[API_CLIENT] Request successful (no JSON response)');
         return {} as T;
       }
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error);
+      console.error('[API_CLIENT] Request failed for', endpoint, ':', error);
       throw error;
     }
   }
@@ -80,9 +91,7 @@ export class ApiClient {
    * GET request
    */
   static async get<T>(endpoint: string): Promise<T> {
-    return this.makeRequest<T>(endpoint, {
-      method: 'GET',
-    });
+    return this.makeRequest<T>(endpoint, { method: 'GET' });
   }
 
   /**
@@ -109,8 +118,16 @@ export class ApiClient {
    * DELETE request
    */
   static async delete<T>(endpoint: string): Promise<T> {
+    return this.makeRequest<T>(endpoint, { method: 'DELETE' });
+  }
+
+  /**
+   * PATCH request
+   */
+  static async patch<T>(endpoint: string, data?: any): Promise<T> {
     return this.makeRequest<T>(endpoint, {
-      method: 'DELETE',
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
     });
   }
 }

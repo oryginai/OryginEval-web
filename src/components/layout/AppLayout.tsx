@@ -9,11 +9,12 @@ const AppLayout: React.FC = () => {
 
   // Show loading spinner while checking authentication
   if (isLoading) {
+    console.log('[APP_LAYOUT] Showing loading state');
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-          <p className="text-muted-foreground text-sm">Loading...</p>
+          <p className="text-muted-foreground text-sm">Loading your session...</p>
         </div>
       </div>
     );
@@ -21,10 +22,12 @@ const AppLayout: React.FC = () => {
 
   // Redirect to auth if not authenticated
   if (!isAuthenticated) {
+    console.log('[APP_LAYOUT] Not authenticated, redirecting to auth');
     return <Navigate to="/auth" replace />;
   }
 
   // Render the main app layout
+  console.log('[APP_LAYOUT] Rendering authenticated layout');
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
