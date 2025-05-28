@@ -19,6 +19,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Types for the quick experiment flow
 interface Message {
@@ -53,9 +63,11 @@ const Home: React.FC = () => {
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
-  const [botInstructions, setBotInstructions] = useState("");
-  const [parameters, setParameters] = useState<HomeParameter[]>([]);
-  const [isLoadingParameters, setIsLoadingParameters] = useState(false);  const [newParameter, setNewParameter] = useState({
+  const [botInstructions, setBotInstructions] = useState("");  const [parameters, setParameters] = useState<HomeParameter[]>([]);
+  const [isLoadingParameters, setIsLoadingParameters] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [parameterToDelete, setParameterToDelete] = useState<{ id: string; index: number } | null>(null);
+  const [newParameter, setNewParameter] = useState({
     name: "",
     description: "",
   });
@@ -182,11 +194,41 @@ const Home: React.FC = () => {
       console.error("Error creating parameter:", error);
       toast.error("Failed to create parameter");
     }  };
+  // Handle delete parameter click - open confirmation dialog
+  const handleDeleteClick = (index: number) => {
+    const parameter = parameters[index];
+    setParameterToDelete({ id: parameter.id, index });
+    setDeleteConfirmOpen(true);
+  };
+  // Delete parameter with API call
+  const deleteParameter = async () => {
+    if (!parameterToDelete || !projectId) return;
 
-  // Remove a parameter
+    try {
+      const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}`, {});
+      console.log("Delete Parameter API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Remove parameter from local state
+        const updatedParameters = parameters.filter((_, i) => i !== parameterToDelete.index);
+        setParameters(updatedParameters);
+        toast.success("Parameter deleted successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to delete parameter");
+      }
+    } catch (error) {
+      console.error("Error deleting parameter:", error);
+      toast.error("Failed to delete parameter");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setParameterToDelete(null);
+    }
+  };
+
+  // Remove a parameter (legacy function - now using delete confirmation)
   const removeParameter = (index: number) => {
-    const updatedParameters = parameters.filter((_, i) => i !== index);
-    setParameters(updatedParameters);
+    handleDeleteClick(index);
   };
   
   // Toggle parameter selection
@@ -671,11 +713,34 @@ const Home: React.FC = () => {
             ? "bg-muted text-muted-foreground cursor-not-allowed" 
             : "bg-primary hover:bg-orygin-red-hover text-white"
           }
-          disabled={step === 2 && !priceQuoted}
-        >
+          disabled={step === 2 && !priceQuoted}        >
           {step === 2 ? "Create Experiment" : "Next"}
         </Button>
       </div>
+
+      {/* Delete Parameter Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the parameter
+              and remove it from your project.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setParameterToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParameter}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

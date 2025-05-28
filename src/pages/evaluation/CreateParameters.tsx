@@ -22,16 +22,27 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
 
 const CreateParameters: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  
-  const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [existingParameters, setExistingParameters] = useState<Parameter[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [parameterToDelete, setParameterToDelete] = useState<{ id: string; name: string; type: 'existing' | 'new' } | null>(null);
   const [newParameter, setNewParameter] = useState({
     name: "",
     description: "",
@@ -106,11 +117,52 @@ const CreateParameters: React.FC = () => {
     //   },
     // ]);
     
-    setNewParameter({ name: "", description: "" });
+    setNewParameter({ name: "", description: "" });  };
+
+  // Handle delete parameter click - open confirmation dialog
+  const handleDeleteClick = (id: string, name: string, type: 'existing' | 'new') => {
+    setParameterToDelete({ id, name, type });
+    setDeleteConfirmOpen(true);
   };
-  // Remove a parameter from the list
+
+  // Delete parameter with API call (for existing parameters) or local removal (for new parameters)
+  const deleteParameter = async () => {
+    if (!parameterToDelete) return;
+
+    if (parameterToDelete.type === 'existing') {
+      // Delete existing parameter via API
+      try {
+        const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}`, {});
+        console.log("Delete Parameter API Response:", response);
+        
+        if (response.data || !response.error) {
+          // Remove parameter from local state
+          setExistingParameters(existingParameters.filter(param => param.id !== parameterToDelete.id));
+          toast.success("Parameter deleted successfully");
+        } else {
+          console.error("API Error:", response.error);
+          toast.error("Failed to delete parameter");
+        }
+      } catch (error) {
+        console.error("Error deleting parameter:", error);
+        toast.error("Failed to delete parameter");
+      }
+    } else {
+      // Remove new parameter from local state only
+      setParameters(parameters.filter(param => param.id !== parameterToDelete.id));
+      toast.success("Parameter removed successfully");
+    }
+
+    setDeleteConfirmOpen(false);
+    setParameterToDelete(null);
+  };
+
+  // Remove a parameter from the list (legacy function - now using delete confirmation)
   const removeParameter = (id: string) => {
-    setParameters(parameters.filter((param) => param.id !== id));
+    const param = parameters.find(p => p.id === id);
+    if (param) {
+      handleDeleteClick(id, param.name, 'new');
+    }
   };
 
   return (
@@ -172,29 +224,27 @@ const CreateParameters: React.FC = () => {
               <CardDescription>
                 Parameters created for this project
               </CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-80 overflow-y-auto space-y-4">
+            </CardHeader>            <CardContent className="max-h-80 overflow-y-auto space-y-4">
               {existingParameters.map((param) => (
                 <div key={param.id} className="p-3 border border-border rounded-md">
                   <div className="flex items-start justify-between">
-                    <h4 className="font-medium">{param.name}</h4>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
-                            <Info className="h-3 w-3" />
-                            <span className="sr-only">Info</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          {param.description}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <div className="flex-1">
+                      <h4 className="font-medium">{param.name}</h4>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {param.description}
+                      </p>
+                    </div>                    <div className="flex items-center gap-1 ml-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteClick(param.id, param.name, 'existing')}
+                        className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span className="sr-only">Delete parameter</span>
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {param.description}
-                  </p>
                 </div>
               ))}
             </CardContent>
@@ -239,6 +289,34 @@ const CreateParameters: React.FC = () => {
             </div>
           )}        </div>
       </div>
+
+      {/* Delete Parameter Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the parameter
+              "{parameterToDelete?.name}" 
+              {parameterToDelete?.type === 'existing' ? 
+                ' and remove it from your project.' : 
+                ' from your current session.'
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setParameterToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParameter}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -159,21 +159,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
   const deleteProject = async (id: string) => {
     setIsLoading(true);
     try {
-      const res = await ApiClient.delete<Project>(
+      const res = await ApiClient.post<any>(
         `/projects-delete?project_id=${id}`,
+        {}
       );
       if (res.data) {
         setProjects(prev => prev.filter(p => p.id !== id));
         if (currentProject?.id === id) {
           setCurrentProject(null);
         }
+        toast.success('Project deleted successfully');
       } else {
         toast.error(res.error?.message || 'Failed to delete project');
       }
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error('Failed to delete project');
     } finally {
       setIsLoading(false);
     }

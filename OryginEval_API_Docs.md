@@ -1,6 +1,6 @@
 # OryginEval API Documentation
 
-**Base URL**: `https://4psd65hvi6.execute-api-ap-south-1.amazonaws.com/eval`
+**Base URL**: `https://4psd65hvi6.execute-api.ap-south-1.amazonaws.com/eval`
 
 ---
 

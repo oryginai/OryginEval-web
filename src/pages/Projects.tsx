@@ -13,6 +13,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -39,13 +49,14 @@ const Projects: React.FC = () => {
     deleteProject,
     isLoading: contextIsLoading,
   } = useProject();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [newProject, setNewProject] = useState({
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();  const [newProject, setNewProject] = useState({
     name: '',
     test_endpoint: '',
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('Projects.tsx useEffect - Auth state:', { isAuthenticated, user: user?.id, authLoading });
@@ -56,7 +67,6 @@ const Projects: React.FC = () => {
       fetchProjects();
     }
   }, [fetchProjects, isAuthenticated, user?.id, authLoading]);
-
   const handleCreateProject = async () => {
     const projectName = newProject.name.trim();
     const endpoint = newProject.test_endpoint.trim();
@@ -67,11 +77,12 @@ const Projects: React.FC = () => {
     }
 
     setIsSubmittingCreate(true);
-    try {
-      const projectData = {
+    try {      const projectData = {
         name: projectName,
-        test_endpoint: endpoint,
-        api_key: '', // Backend is expected to generate the API key
+        labrat_json: {
+          endpoint: endpoint,
+          headers: {}
+        }
       };
       await createProject(projectData);
       setNewProject({ name: '', test_endpoint: '' });
@@ -82,6 +93,23 @@ const Projects: React.FC = () => {
       toast.error('Failed to create project. Please try again.');
     } finally {
       setIsSubmittingCreate(false);
+    }
+  };
+
+  const handleDeleteClick = (projectId: string) => {
+    setProjectToDelete(projectId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (projectToDelete) {
+      try {
+        await deleteProject(projectToDelete);
+        setDeleteConfirmOpen(false);
+        setProjectToDelete(null);
+      } catch (error) {
+        console.error('Failed to delete project:', error);
+      }
     }
   };
 
@@ -189,11 +217,10 @@ const Projects: React.FC = () => {
                         <MoreVertical className="h-4 w-4" />
                         <span className="sr-only">Open menu</span>
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    </DropdownMenuTrigger>                    <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => deleteProject(project.id)}
+                        onClick={() => handleDeleteClick(project.id)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete
@@ -239,8 +266,30 @@ const Projects: React.FC = () => {
               Create New Project
             </Button>
           </div>
-        </div>
-      )}
+        </div>      )}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the project
+              and all associated data including datasets, parameters, and experiments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setProjectToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
