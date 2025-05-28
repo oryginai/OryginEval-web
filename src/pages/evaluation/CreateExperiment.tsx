@@ -29,6 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, FileText, Database } from "lucide-react";
 import { Dataset, Parameter } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
+import { v4 as uuidv4 } from 'uuid';
 
 const CreateExperiment: React.FC = () => {
   const navigate = useNavigate();
@@ -113,7 +114,6 @@ const CreateExperiment: React.FC = () => {
       }
     });
   };
-
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,16 +137,38 @@ const CreateExperiment: React.FC = () => {
     setIsLoading(true);
     
     try {
-      // In a real app, this would call the API to create the experiment
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Generate a unique experiment ID
+      const experimentId = uuidv4();
       
-      toast.success("Experiment created successfully");
+      // Prepare the request payload
+      const payload = {
+        experiment_name: experimentName,
+        dataset_id: selectedDatasetId,
+        parameter_ids: selectedParameterIds,
+        labrat_json: {} // Empty object as per API spec
+      };
       
-      // Navigate to the report page with the new experiment id
-      navigate(`/projects/${projectId}/report/exp_1`);
+      console.log("Creating experiment with payload:", payload);
+      
+      // Call the async experiment creation API
+      const response = await ApiClient.post(
+        `/experiments-create?project_id=${projectId}&experiment_id=${experimentId}`,
+        payload
+      );
+      
+      console.log("Experiment creation response:", response);
+      
+      if (response.data && (response.data as any).status === "success") {
+        toast.success(`Experiment "${experimentName}" created successfully! It's now running in the background.`);
+        
+        // Navigate to the history page to show the running experiment
+        navigate(`/projects/${projectId}/evaluation/history`);
+      } else {
+        throw new Error("Failed to create experiment");
+      }
     } catch (error) {
       console.error("Error creating experiment:", error);
-      toast.error("Failed to create experiment");
+      toast.error("Failed to create experiment. Please try again.");
     } finally {
       setIsLoading(false);
     }

@@ -23,7 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, ExternalLink, Trash2, Check, Clock, AlertTriangle, AlertCircle } from "lucide-react";
+import { Plus, MoreVertical, ExternalLink, Trash2, Check, Clock, AlertTriangle, AlertCircle, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { ApiClient } from "@/lib/api-client";
@@ -40,64 +40,90 @@ interface ExperimentData {
 const ExperimentHistory: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [experiments, setExperiments] = useState<ExperimentData[]>([]);
-  useEffect(() => {
-    const fetchExperiments = async () => {
-      if (!projectId) return;
-      
-      try {
-        setIsLoading(true);
-        const response = await ApiClient.get(`/experiments-list?project_id=${projectId}`);
-        console.log("Experiments API Response:", response);
-        
-        if (response.data && (response.data as any).experiments) {
-          const apiExperiments = (response.data as any).experiments;
-          
-          // Transform API response to our interface
-          const transformedExperiments: ExperimentData[] = apiExperiments.map((exp: any) => {            // Calculate average semantic similarity score from results
-            let semanticSimilarityScore = 0;
-            if (exp.result && Array.isArray(exp.result)) {
-              const semanticScores = exp.result
-                .map((conv: any) => {
-                  const semanticEval = conv.evaluations?.find((evaluation: any) => 
-                    evaluation.name === "Semantic Similarity"
-                  );
-                  return semanticEval ? semanticEval.score : 0;
-                })
-                .filter((score: number) => score > 0);
-              
-              if (semanticScores.length > 0) {
-                semanticSimilarityScore = semanticScores.reduce((sum: number, score: number) => sum + score, 0) / semanticScores.length;
-              }
-            }
-            
-            return {
-              experiment_id: exp.experiment_id,
-              created_at: exp.created_at,
-              name: exp.name || `Experiment ${exp.experiment_id.slice(0, 8)}...`,
-              status: "completed", // As per requirements, show all as completed
-              semantic_similarity_score: semanticSimilarityScore
-            };
-          });
-          
-          setExperiments(transformedExperiments);
-        } else {
-          console.warn("No experiments data in response");
-          setExperiments([]);
-        }
-      } catch (error) {
-        console.error("Error fetching experiments:", error);
-        toast.error("Failed to fetch experiments");
-        setExperiments([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
+    const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [experiments, setExperiments] = useState<ExperimentData[]>([]);  useEffect(() => {
     fetchExperiments();
   }, [projectId]);
+
+  const fetchExperiments = async (isRefresh = false) => {
+    if (!projectId) return;
+    
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      
+      const response = await ApiClient.get(`/experiments-list?project_id=${projectId}`);
+      console.log("Experiments API Response:", response);
+      
+      if (response.data && (response.data as any).experiments) {
+        const apiExperiments = (response.data as any).experiments;
+          // Transform API response to our interface
+        const transformedExperiments: ExperimentData[] = apiExperiments.map((exp: any) => {
+          console.log("Processing experiment:", exp.experiment_id, "Has result:", !!exp.result, "Has results:", !!exp.results);
+          
+          // Calculate average semantic similarity score from results
+          let semanticSimilarityScore = 0;
+          let status = "running"; // Default to running
+            // Check both 'result' and 'results' fields (API might use either)
+          const resultsArray = exp.result || exp.results;
+          if (resultsArray && Array.isArray(resultsArray) && resultsArray.length > 0) {
+            console.log(`Experiment ${exp.experiment_id} has ${resultsArray.length} results - marking as completed`);
+            // If experiment has results, it's completed
+            status = "completed";
+            
+            const semanticScores = resultsArray
+              .map((conv: any) => {
+                const semanticEval = conv.evaluations?.find((evaluation: any) => 
+                  evaluation.name === "Semantic Similarity"
+                );
+                return semanticEval ? semanticEval.score : 0;
+              })
+              .filter((score: number) => score > 0);
+            
+            if (semanticScores.length > 0) {
+              semanticSimilarityScore = semanticScores.reduce((sum: number, score: number) => sum + score, 0) / semanticScores.length;
+            }
+          }
+            return {
+            experiment_id: exp.experiment_id,
+            created_at: exp.created_at,
+            name: exp.name || `Experiment ${exp.experiment_id.slice(0, 8)}...`,
+            status: status,
+            semantic_similarity_score: semanticSimilarityScore
+          };
+        });
+          console.log("Transformed experiments:", transformedExperiments);
+        
+        // Force state update by creating a completely new array
+        setExperiments([...transformedExperiments]);
+        
+        if (isRefresh) {
+          const runningCount = transformedExperiments.filter(exp => exp.status === "running").length;
+          const completedCount = transformedExperiments.filter(exp => exp.status === "completed").length;
+          
+          if (runningCount > 0) {
+            toast.info(`${runningCount} experiment(s) still running, ${completedCount} completed.`);
+          } else {
+            toast.success("All experiments completed!");
+          }
+        }
+      } else {
+        console.warn("No experiments data in response");
+        setExperiments([]);
+      }
+    } catch (error) {
+      console.error("Error fetching experiments:", error);
+      toast.error("Failed to fetch experiments");
+      setExperiments([]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -121,7 +147,6 @@ const ExperimentHistory: React.FC = () => {
         return null;
     }
   };
-
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "completed":
@@ -141,6 +166,8 @@ const ExperimentHistory: React.FC = () => {
     switch (status) {
       case "completed":
         return "bg-green-500/10 text-green-500 border-green-500/20";
+      case "pending":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
       case "running":
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "failed":
@@ -151,8 +178,7 @@ const ExperimentHistory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">      <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Experiment History</h2>
           <p className="text-muted-foreground mt-1">
@@ -160,13 +186,25 @@ const ExperimentHistory: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
-          className="gap-2 bg-primary hover:bg-orygin-red-hover text-white"
-        >
-          <Plus className="h-4 w-4" />
-          New Experiment
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => fetchExperiments(true)}
+            disabled={isRefreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+          
+          <Button
+            onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
+            className="gap-2 bg-primary hover:bg-orygin-red-hover text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New Experiment
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -205,20 +243,17 @@ const ExperimentHistory: React.FC = () => {
                     <TableCell className="font-medium">
                       {experiment.name}
                     </TableCell>
-                    <TableCell>
-                      <Badge
+                    <TableCell>                      <Badge
                         variant="outline"
                         className={`flex w-fit items-center gap-1 ${getStatusColor(experiment.status)}`}
-                      >
-                        {getStatusIcon(experiment.status)}
+                      >                        {getStatusIcon(experiment.status)}
                         <span>{getStatusLabel(experiment.status)}</span>
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(experiment.created_at)}
-                    </TableCell>
-                    <TableCell>
-                      {experiment.semantic_similarity_score > 0 ? (
+                    </TableCell>                    <TableCell>
+                      {experiment.status === "completed" && experiment.semantic_similarity_score > 0 ? (
                         <span className="font-mono">
                           {Math.round(experiment.semantic_similarity_score * 100)}%
                         </span>
@@ -233,9 +268,10 @@ const ExperimentHistory: React.FC = () => {
                             <MoreVertical className="h-4 w-4" />
                             <span className="sr-only">Open menu</span>
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">                          <DropdownMenuItem
+                        </DropdownMenuTrigger>                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
                             onClick={() => navigate(`/projects/${projectId}/report/${experiment.experiment_id}`)}
+                            disabled={experiment.status === "running" || experiment.status === "pending"}
                           >
                             <ExternalLink className="mr-2 h-4 w-4" />
                             View Results

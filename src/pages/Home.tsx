@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react"; // Added ChevronDown and ChevronRight
+import { Plus, Trash2, ChevronDown, ChevronRight, RefreshCw } from "lucide-react"; // Added RefreshCw
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/contexts/ProjectContext";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,12 +58,14 @@ const Home: React.FC = () => {
   const [showCreateFlow, setShowCreateFlow] = useState(false);
   const [priceQuoted, setPriceQuoted] = useState(false);
   const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
-  const [isCalculatingCost, setIsCalculatingCost] = useState(false);
-  const [datasetId, setDatasetId] = useState<string | null>(null);
+  const [isCalculatingCost, setIsCalculatingCost] = useState(false);  const [datasetId, setDatasetId] = useState<string | null>(null);
+  const [isGeneratingDataset, setIsGeneratingDataset] = useState(false);
+  const [isDatasetReady, setIsDatasetReady] = useState(false);
+  const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
-  const [botInstructions, setBotInstructions] = useState("");  const [parameters, setParameters] = useState<HomeParameter[]>([]);
+  const [botInstructions, setBotInstructions] = useState("");const [parameters, setParameters] = useState<HomeParameter[]>([]);
   const [isLoadingParameters, setIsLoadingParameters] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [parameterToDelete, setParameterToDelete] = useState<{ id: string; index: number } | null>(null);
@@ -78,7 +80,6 @@ const Home: React.FC = () => {
       fetchParameters();
     }
   }, [step, projectId]);
-
   const fetchParameters = async () => {
     setIsLoadingParameters(true);
     try {
@@ -109,6 +110,40 @@ const Home: React.FC = () => {
     } finally {
       setIsLoadingParameters(false);
     }
+  };
+
+  // Check dataset generation status
+  const checkDatasetStatus = async () => {
+    if (!datasetId) return;
+
+    try {
+      const response = await ApiClient.get(`/datasets-details?dataset_id=${datasetId}`);
+      console.log("Dataset details response:", response);
+
+      if (response.data && (response.data as any).status === "success") {
+        const dataset = (response.data as any).dataset;
+        
+        if (dataset && dataset.dataset_json && Array.isArray(dataset.dataset_json) && dataset.dataset_json.length > 0) {
+          // Dataset is ready with data
+          const conversations = dataset.dataset_json.map((conv: any) => ({
+            id: conv.id,
+            messages: conv.conversation
+          }));
+          
+          setGeneratedConversations(conversations);
+          setIsDatasetReady(true);
+          toast.success("Dataset is ready! Generated conversations have been loaded.");
+        } else {
+          // Dataset exists but is empty (still generating)
+          toast.info("Dataset is still being generated. Please try again in a moment.");
+        }
+      } else {
+        toast.error("Failed to check dataset status.");
+      }
+    } catch (error) {
+      console.error("Error checking dataset status:", error);
+      toast.error("Failed to check dataset status.");
+    }
   };  const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
@@ -117,6 +152,9 @@ const Home: React.FC = () => {
     setEstimatedPrice(null);
     setIsCalculatingCost(false);
     setDatasetId(null);
+    setIsGeneratingDataset(false);
+    setIsDatasetReady(false);
+    setGeneratedConversations([]);
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
@@ -134,12 +172,18 @@ const Home: React.FC = () => {
       }
     ]);
   };
-
   // Update a message in a conversation
   const updateMessage = (conversationIndex: number, messageIndex: number, content: string) => {
     const updatedConversations = [...sampleConversations];
     updatedConversations[conversationIndex].messages[messageIndex].content = content;
     setSampleConversations(updatedConversations);
+  };
+
+  // Update a message in generated conversations
+  const updateGeneratedMessage = (conversationIndex: number, messageIndex: number, content: string) => {
+    const updatedConversations = [...generatedConversations];
+    updatedConversations[conversationIndex].messages[messageIndex].content = content;
+    setGeneratedConversations(updatedConversations);
   };
 
   // Add a new message to a conversation
@@ -154,11 +198,29 @@ const Home: React.FC = () => {
     setSampleConversations(updatedConversations);
   };
 
+  // Add a new message to generated conversations
+  const addGeneratedMessage = (conversationIndex: number) => {
+    const updatedConversations = [...generatedConversations];
+    const lastMessage = updatedConversations[conversationIndex].messages.slice(-1)[0];
+    const newRole = lastMessage.role === "user" ? "assistant" : "user";
+    updatedConversations[conversationIndex].messages.push({
+      role: newRole,
+      content: ""
+    });
+    setGeneratedConversations(updatedConversations);
+  };
+
   // Remove a conversation
   const removeConversation = (index: number) => {
     const updatedConversations = sampleConversations.filter((_, i) => i !== index);
     setSampleConversations(updatedConversations);
-  };  // Add a new parameter
+  };
+
+  // Remove a generated conversation
+  const removeGeneratedConversation = (index: number) => {
+    const updatedConversations = generatedConversations.filter((_, i) => i !== index);
+    setGeneratedConversations(updatedConversations);
+  };// Add a new parameter
   const addParameter = async () => {
     if (!newParameter.name.trim() || !newParameter.description.trim()) {
       toast.error("Please fill in all fields");
@@ -292,10 +354,8 @@ const Home: React.FC = () => {
       setIsCalculatingCost(false);
     }
   };
-
   // Handle next step in the wizard
-  const handleNext = () => {
-    // In a real app, this would call the API to synthesize a dataset based on the samples
+  const handleNext = async () => {
     if (step === 0) {
       // Validate sample conversations
       const isValid = sampleConversations.every(convo => 
@@ -306,23 +366,82 @@ const Home: React.FC = () => {
         alert("Please fill in all conversation messages");
         return;
       }
-        // Simulate API call to generate more conversations
-      setTimeout(() => {
-        // Add some mock generated conversations
-        // In a real implementation, we would pass botInstructions to the API
-        console.log("Bot instructions:", botInstructions);
-        setSampleConversations([
-          ...sampleConversations,
-          ...mockData.createMockConversations(5)
-        ]);
-        setStep(1);
-      }, 500);    } else if (step === 1) {
-      // Validate selected conversations and simulate dataset creation
-      // In a real app, this would call the API to create a dataset from the conversations
-      const generatedDatasetId = uuidv4();
-      setDatasetId(generatedDatasetId);
-      console.log("Generated dataset ID:", generatedDatasetId);
-      setStep(2);} else if (step === 2) {
+
+      setIsGeneratingDataset(true);
+      
+      try {
+        // Generate a new dataset ID
+        const newDatasetId = uuidv4();
+        
+        // Prepare the sample data in the correct format
+        const sampleData = sampleConversations.map(convo => ({
+          id: convo.id,
+          conversation: convo.messages
+        }));
+
+        // Call the datasets-generate API
+        const response = await ApiClient.post(
+          `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
+          {
+            sample_data: sampleData,
+            num_samples: 5,
+            extra_info: botInstructions
+          }
+        );
+
+        console.log("Dataset generation response:", response);
+
+        if (response.data && (response.data as any).status === "success") {
+          setDatasetId(newDatasetId);
+          setIsDatasetReady(false);
+          setGeneratedConversations([]);
+          setStep(1);
+          toast.success("Dataset generation started! Please wait while we synthesize conversations.");
+        } else {
+          throw new Error("Failed to start dataset generation");
+        }
+      } catch (error) {
+        console.error("Error starting dataset generation:", error);
+        toast.error("Failed to start dataset generation. Please try again.");
+      } finally {
+        setIsGeneratingDataset(false);
+      }    } else if (step === 1) {
+      // Move to parameter selection if dataset is ready
+      if (isDatasetReady) {
+        // Save any edits made to generated conversations before proceeding
+        if (generatedConversations.length > 0 && datasetId) {
+          try {
+            // Prepare the dataset in the correct format for the API
+            const datasetData = {
+              dataset: generatedConversations.map(convo => ({
+                id: convo.id,
+                conversation: convo.messages
+              }))
+            };
+
+            console.log("Updating dataset with edited conversations:", datasetData);
+            
+            const response = await ApiClient.post(`/datasets-update?dataset_id=${datasetId}`, datasetData);
+            console.log("Dataset update response:", response);
+
+            if (response.data && (response.data as any).status === "success") {
+              toast.success("Conversations saved successfully!");
+              setStep(2);
+            } else {
+              toast.error("Failed to save conversation edits. Please try again.");
+              return;
+            }
+          } catch (error) {
+            console.error("Error updating dataset:", error);
+            toast.error("Failed to save conversation edits. Please try again.");
+            return;
+          }
+        } else {
+          setStep(2);
+        }
+      } else {
+        toast.error("Please wait for the dataset to be ready before proceeding.");
+      }    } else if (step === 2) {
       // Check if at least one parameter is selected
       const hasSelectedParam = parameters.some(param => param.selected);
       
@@ -331,12 +450,41 @@ const Home: React.FC = () => {
         return;
       }
       
-      // In a real app, this would create the experiment and redirect to results
-      setTimeout(() => {
-        setShowCreateFlow(false);
-        // Navigate to the reports page with a mock experiment ID
-        navigate(`/projects/${currentProject?.id}/report`);
-      }, 500);
+      // Create the experiment using the async API
+      try {
+        const experimentId = uuidv4();
+        const selectedParameterIds = parameters
+          .filter(param => param.selected)
+          .map(param => param.id);
+        
+        const payload = {
+          experiment_name: `Quick Experiment ${new Date().toLocaleDateString()}`,
+          dataset_id: datasetId,
+          parameter_ids: selectedParameterIds,
+          labrat_json: {}
+        };
+        
+        console.log("Creating quick experiment with payload:", payload);
+        
+        const response = await ApiClient.post(
+          `/experiments-create?project_id=${projectId}&experiment_id=${experimentId}`,
+          payload
+        );
+        
+        console.log("Quick experiment creation response:", response);
+        
+        if (response.data && (response.data as any).status === "success") {
+          toast.success("Experiment created successfully! It's now running in the background.");
+          setShowCreateFlow(false);
+          // Navigate to the experiment history page
+          navigate(`/projects/${projectId}/evaluation/history`);
+        } else {
+          throw new Error("Failed to create experiment");
+        }
+      } catch (error) {
+        console.error("Error creating quick experiment:", error);
+        toast.error("Failed to create experiment. Please try again.");
+      }
     }
   };
 
@@ -385,10 +533,24 @@ const Home: React.FC = () => {
           </h2>
           <p className="text-muted-foreground">Step {step + 1} of 3</p>
         </div>
-        
-        <Button
+          <Button
           variant="outline"
-          onClick={() => setShowCreateFlow(false)}
+          onClick={() => {
+            setShowCreateFlow(false);
+            setStep(0);
+            setDatasetId(null);
+            setIsGeneratingDataset(false);
+            setIsDatasetReady(false);
+            setGeneratedConversations([]);
+            setSampleConversations([
+              { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
+            ]);
+            setBotInstructions("");
+            setParameters([]);
+            setNewParameter({ name: "", description: "" });
+            setPriceQuoted(false);
+            setEstimatedPrice(null);
+          }}
         >
           Cancel
         </Button>
@@ -470,59 +632,85 @@ const Home: React.FC = () => {
             </Card>
           </div>
         </div>
-      )}
-      {step === 1 && (
+      )}      {step === 1 && (
         <div className="space-y-6">
-          <p className="text-muted-foreground">
-            Review and edit the generated conversations. You can remove any that don't meet your requirements.
-          </p>
-          
-          <div className="max-h-[60vh] overflow-y-auto space-y-4 pr-2">
-            {sampleConversations.map((conversation, i) => (
-              <div key={conversation.id} className="orygin-card p-4 relative">
-                <div className="absolute top-2 right-2 flex space-x-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeConversation(i)}
+          {!isDatasetReady ? (
+            <div className="text-center py-12">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dataset Generation in Progress</CardTitle>
+                  <CardDescription>
+                    Your dataset is being synthesized. This may take a few minutes.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="animate-pulse">
+                    <div className="h-4 bg-muted rounded w-3/4 mx-auto mb-2"></div>
+                    <div className="h-4 bg-muted rounded w-1/2 mx-auto"></div>
+                  </div>                  <Button 
+                    onClick={checkDatasetStatus}
+                    variant="outline"
+                    className="mt-4"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Status
                   </Button>
-                </div>
-                
-                <h3 className="text-sm font-medium mb-2">
-                  {i < sampleConversations.length - mockData.createMockConversations(5).length ? 
-                    "Sample Conversation" : "Generated Conversation"} {i + 1}
-                </h3>
-                
-                <div className="space-y-3">
-                  {conversation.messages.map((message, j) => (
-                    <div key={`${conversation.id}-${j}`} className="space-y-1">
-                      <Label className="text-xs capitalize">{message.role}</Label>
-                      <Textarea
-                        value={message.content}
-                        onChange={(e) => updateMessage(i, j, e.target.value)}
-                        placeholder={`${message.role === "user" ? "User message" : "Assistant response"}...`}
-                        className="min-h-16"
-                      />
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <>
+              <p className="text-muted-foreground">
+                Review and edit the generated conversations. You can remove any that don't meet your requirements.
+              </p>
+              
+              <div className="max-h-[60vh] overflow-y-auto space-y-4 pr-2">
+                {generatedConversations.map((conversation, i) => (
+                  <div key={conversation.id} className="orygin-card p-4 relative">
+                    <div className="absolute top-2 right-2 flex space-x-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeGeneratedConversation(i)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ))}
-                </div>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => addMessage(i)} 
-                  className="mt-3"
-                >
-                  Add Message
-                </Button>
+                    
+                    <h3 className="text-sm font-medium mb-2">
+                      Generated Conversation {i + 1}
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {conversation.messages.map((message, j) => (
+                        <div key={`${conversation.id}-${j}`} className="space-y-1">
+                          <Label className="text-xs capitalize">{message.role}</Label>
+                          <Textarea
+                            value={message.content}
+                            onChange={(e) => updateGeneratedMessage(i, j, e.target.value)}
+                            placeholder={`${message.role === "user" ? "User message" : "Assistant response"}...`}
+                            className="min-h-16"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => addGeneratedMessage(i)} 
+                      className="mt-3"
+                    >
+                      Add Message
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
-      )}        {step === 2 && (
+      )}{step === 2 && (
         <div className="space-y-6">
           <p className="text-muted-foreground">
             Select parameters to evaluate your conversations. You can also create new parameters for your specific evaluation needs.
@@ -706,15 +894,26 @@ const Home: React.FC = () => {
           </Button>
         ) : (
           <div></div>
-        )}
-        <Button
+        )}        <Button
           onClick={handleNext}
-          className={step === 2 && !priceQuoted 
+          className={
+            (step === 0 && isGeneratingDataset) || 
+            (step === 1 && !isDatasetReady) || 
+            (step === 2 && !priceQuoted)
             ? "bg-muted text-muted-foreground cursor-not-allowed" 
             : "bg-primary hover:bg-orygin-red-hover text-white"
           }
-          disabled={step === 2 && !priceQuoted}        >
-          {step === 2 ? "Create Experiment" : "Next"}
+          disabled={
+            (step === 0 && isGeneratingDataset) || 
+            (step === 1 && !isDatasetReady) || 
+            (step === 2 && !priceQuoted)
+          }
+        >
+          {step === 0 && isGeneratingDataset 
+            ? "Generating..." 
+            : step === 2 
+            ? "Create Experiment" 
+            : "Next"}
         </Button>
       </div>
 
