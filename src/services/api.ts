@@ -245,10 +245,8 @@ export const authApi = {
   },
   isAuthenticated: async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return !!session;
+      const { data } = await supabase.auth.getUser();
+      return !!data.user;
     } catch (error) {
       console.error('Authentication check failed:', error);
       return false;
