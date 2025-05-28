@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { ApiClient } from '@/lib/api-client';
 
 interface User {
   id: string;
@@ -25,10 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     setLoading(true);
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         setSession(session);
         setUser({
@@ -37,6 +37,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           email: session?.user.email as string,
           avatar: session?.user.user_metadata?.avatar_url || 'User',
         });
+        
+        // Create account on backend when user logs in
+        try {
+          console.log('Supabase user ID:', session.user.id);
+          const response = await ApiClient.post('/accounts-add', { 'account_id': session.user.id });
+          console.log('API Response:', response);
+        } catch (error) {
+          console.error('Error creating account:', error);
+        }
       }
       setLoading(false);
     });
@@ -44,14 +53,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      setUser({
-        id: session?.user.id,
-        name: session?.user.user_metadata?.full_name || 'User',
-        email: session?.user.email as string,
-        avatar: session?.user.user_metadata?.avatar_url || 'User',
-      });
+      if (session) {
+        setUser({
+          id: session?.user.id,
+          name: session?.user.user_metadata?.full_name || 'User',
+          email: session?.user.email as string,
+          avatar: session?.user.user_metadata?.avatar_url || 'User',
+        });
+        
+        // Create account on backend when user logs in
+        try {
+          console.log('Supabase user ID:', session.user.id);
+          const response = await ApiClient.post('/accounts-add', { 'account_id': session.user.id });
+          console.log('API Response:', response);
+        } catch (error) {
+          console.error('Error creating account:', error);
+        }
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
 
