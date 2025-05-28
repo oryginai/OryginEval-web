@@ -25,25 +25,72 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ExternalLink, Trash2, Check, Clock, AlertTriangle, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { experimentApi, Experiment, mockData } from "@/services/api";
+import { toast } from "@/components/ui/sonner";
+import { ApiClient } from "@/lib/api-client";
+
+// Interface for experiment data from API
+interface ExperimentData {
+  experiment_id: string;
+  created_at: string;
+  name: string;
+  status: string;
+  semantic_similarity_score: number;
+}
 
 const ExperimentHistory: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   
   const [isLoading, setIsLoading] = useState(true);
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
-
+  const [experiments, setExperiments] = useState<ExperimentData[]>([]);
   useEffect(() => {
     const fetchExperiments = async () => {
+      if (!projectId) return;
+      
       try {
         setIsLoading(true);
-        // In a real app, this would fetch from the API
-        // const data = await experimentApi.getExperiments(projectId || "");
-        const mockExperiments = mockData.createMockExperiments(5);
-        setExperiments(mockExperiments);
+        const response = await ApiClient.get(`/experiments-list?project_id=${projectId}`);
+        console.log("Experiments API Response:", response);
+        
+        if (response.data && (response.data as any).experiments) {
+          const apiExperiments = (response.data as any).experiments;
+          
+          // Transform API response to our interface
+          const transformedExperiments: ExperimentData[] = apiExperiments.map((exp: any) => {            // Calculate average semantic similarity score from results
+            let semanticSimilarityScore = 0;
+            if (exp.result && Array.isArray(exp.result)) {
+              const semanticScores = exp.result
+                .map((conv: any) => {
+                  const semanticEval = conv.evaluations?.find((evaluation: any) => 
+                    evaluation.name === "Semantic Similarity"
+                  );
+                  return semanticEval ? semanticEval.score : 0;
+                })
+                .filter((score: number) => score > 0);
+              
+              if (semanticScores.length > 0) {
+                semanticSimilarityScore = semanticScores.reduce((sum: number, score: number) => sum + score, 0) / semanticScores.length;
+              }
+            }
+            
+            return {
+              experiment_id: exp.experiment_id,
+              created_at: exp.created_at,
+              name: exp.name || `Experiment ${exp.experiment_id.slice(0, 8)}...`,
+              status: "completed", // As per requirements, show all as completed
+              semantic_similarity_score: semanticSimilarityScore
+            };
+          });
+          
+          setExperiments(transformedExperiments);
+        } else {
+          console.warn("No experiments data in response");
+          setExperiments([]);
+        }
       } catch (error) {
         console.error("Error fetching experiments:", error);
+        toast.error("Failed to fetch experiments");
+        setExperiments([]);
       } finally {
         setIsLoading(false);
       }
@@ -148,13 +195,13 @@ const ExperimentHistory: React.FC = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead className="w-20">Score</TableHead>
+                  <TableHead className="w-32">Semantic Similarity</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {experiments.map((experiment) => (
-                  <TableRow key={experiment.id}>
+                  <TableRow key={experiment.experiment_id}>
                     <TableCell className="font-medium">
                       {experiment.name}
                     </TableCell>
@@ -171,9 +218,9 @@ const ExperimentHistory: React.FC = () => {
                       {formatDate(experiment.created_at)}
                     </TableCell>
                     <TableCell>
-                      {experiment.results ? (
+                      {experiment.semantic_similarity_score > 0 ? (
                         <span className="font-mono">
-                          {Math.round(experiment.results.overall_score * 100)}%
+                          {Math.round(experiment.semantic_similarity_score * 100)}%
                         </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -188,7 +235,7 @@ const ExperimentHistory: React.FC = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">                          <DropdownMenuItem
-                            onClick={() => navigate(`/projects/${projectId}/report/${experiment.id}`)}
+                            onClick={() => navigate(`/projects/${projectId}/report/${experiment.experiment_id}`)}
                           >
                             <ExternalLink className="mr-2 h-4 w-4" />
                             View Results
