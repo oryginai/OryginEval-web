@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { Upload, FileText } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { ApiClient } from "@/lib/api-client";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Message {
   role: "user" | "assistant";
@@ -15,7 +17,7 @@ interface Message {
 
 interface Conversation {
   id: string;
-  messages: Message[];
+  conversation: Message[];
 }
 
 const UploadDataset: React.FC = () => {
@@ -53,8 +55,8 @@ const UploadDataset: React.FC = () => {
         // Validate the structure
         const isValid = parsed.every((convo: any) => 
           convo.id && 
-          Array.isArray(convo.messages) && 
-          convo.messages.every((msg: any) => 
+          Array.isArray(convo.conversation) && 
+          convo.conversation.every((msg: any) => 
             typeof msg.role === 'string' && 
             (msg.role === 'user' || msg.role === 'assistant') && 
             typeof msg.content === 'string'
@@ -97,8 +99,8 @@ const UploadDataset: React.FC = () => {
       // Validate the structure
       const isValid = parsed.every((convo: any) => 
         convo.id && 
-        Array.isArray(convo.messages) && 
-        convo.messages.every((msg: any) => 
+        Array.isArray(convo.conversation) && 
+        convo.conversation.every((msg: any) => 
           typeof msg.role === 'string' && 
           (msg.role === 'user' || msg.role === 'assistant') && 
           typeof msg.content === 'string'
@@ -133,8 +135,12 @@ const UploadDataset: React.FC = () => {
     setIsLoading(true);
       try {
       // In a real app, this would call the API to upload the dataset
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      // await new Promise(resolve => setTimeout(resolve, 1000));
+      const datasetData = {"dataset":conversations, "project_id": projectId}
+      console.log("Uploading dataset:", datasetData);
+      const response = await ApiClient.post(`/datasets-create?dataset_id=${uuidv4()}`,datasetData)
+      console.log("Dataset upload response:", response);
+
       toast.success(`Dataset "${datasetName}" uploaded successfully`);
       
       // Reset the form
@@ -215,7 +221,7 @@ const UploadDataset: React.FC = () => {
             id="json-content"
             value={jsonContent}
             onChange={handleJsonChange}
-            placeholder='[{"id": "conv_1", "messages": [{"role": "user", "content": "Hello, how are you?"}, {"role": "assistant", "content": "I am doing well, thank you for asking!"}]}]'
+            placeholder='[{"id": "23811", "conversation": [{"role": "user", "content": "Hello, how are you?"}, {"role": "assistant", "content": "I am doing well, thank you for asking!"}]}]'
             className="mt-1 min-h-40 font-mono text-sm"
           />
           {uploadError && (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/services/api';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/lib/supabase';
+import { ApiClient } from '@/lib/api-client';
 
 interface User {
   id: string;
@@ -51,10 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
+
+        console.log('Supabase user ID:', session.user.id);
+        const response = await ApiClient.post('/accounts-add',{'account_id': session.user.id });
+        console.log('API Response:', response);
+        
         const userData = await authApi.getCurrentUser();
         setUser(userData);
         setIsLoading(false);
-        console.log('Supabase user ID:', session.user.id);
+
+
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsLoading(false);

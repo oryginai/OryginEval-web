@@ -8,65 +8,45 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { Plus, MoreVertical, Trash2, Database, Upload, FileText } from "lucide-react";
 import { Dataset } from "@/services/api";
+import { ApiClient } from "@/lib/api-client";
 
 const AllDatasets: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-
   // Fetch datasets
   useEffect(() => {
     const fetchDatasets = async () => {
       setIsLoading(true);
       try {
-        // In a real app, this would call the API
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const response = await ApiClient.get('/datasets-list', { project_id: projectId });
+        console.log("API Response:", response);
         
-        // Mock data
-        const mockDatasets: Dataset[] = [
-          {
-            id: "dataset1",
-            name: "Customer Support Conversations",
-            project_id: projectId || "",
-            created_at: new Date().toISOString(),
-            conversations: Array(25).fill(null).map((_, i) => ({
-              id: `conv_${i}`,
-              messages: [
-                { role: "user", content: "Sample user message" },
-                { role: "assistant", content: "Sample assistant response" }
-              ]
-            }))
-          },
-          {
-            id: "dataset2",
-            name: "Product Q&A",
-            project_id: projectId || "",
-            created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            conversations: Array(15).fill(null).map((_, i) => ({
-              id: `conv_${i}`,
-              messages: [
-                { role: "user", content: "Sample user message" },
-                { role: "assistant", content: "Sample assistant response" }
-              ]
-            }))
-          },
-          {
-            id: "dataset3",
-            name: "Technical Support",
-            project_id: projectId || "",
-            created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            conversations: Array(32).fill(null).map((_, i) => ({
-              id: `conv_${i}`,
-              messages: [
-                { role: "user", content: "Sample user message" },
-                { role: "assistant", content: "Sample assistant response" }
-              ]
-            }))
-          }
-        ];
+        // Type the response data
+        const responseData = response.data as { status?: string; datasets?: any[] };
         
-        setDatasets(mockDatasets);
+        // Transform API response to match frontend Dataset interface
+        if (responseData && responseData.datasets && Array.isArray(responseData.datasets)) {
+          const transformedDatasets: Dataset[] = responseData.datasets.map((dataset: any) => ({
+            id: dataset.dataset_id,
+            name: dataset.name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`, // Use API name if available, otherwise generate one
+            project_id: projectId || "",
+            created_at: dataset.created_at,
+            conversations: (dataset.dataset_json || []).map((conv: any) => ({
+              id: conv.id,
+              messages: (conv.conversation || []).map((msg: any) => ({
+                role: msg.role,
+                content: msg.content
+              }))
+            }))
+          }));
+          
+          setDatasets(transformedDatasets);
+        } else {
+          console.warn("Unexpected API response structure:", response);
+          setDatasets([]);
+        }
       } catch (error) {
         console.error("Error fetching datasets:", error);
         toast.error("Failed to fetch datasets");
