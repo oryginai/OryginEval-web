@@ -36,10 +36,38 @@ const CreateParameters: React.FC = () => {
     name: "",
     description: "",
   });
+  useEffect(() => {    const fetchExistingParameters = async () => {
+      try {
+        const response = await ApiClient.get(`/parameters-list?project_id=${projectId}`);
+        console.log("Existing Parameters API Response:", response);
+          if (response.data && (response.data as any).parameters) {
+          // Map the API response to match the Parameter interface
+          const mappedParameters = (response.data as any).parameters.map((param: any) => ({
+            id: param.parameter_id,
+            name: param.name,
+            description: param.description,
+            created_at: param.created_at,
+            project_id: projectId || ""
+          }));
+          setExistingParameters(mappedParameters);
+        } else if (response.error) {
+          console.error("API Error:", response.error);
+          // Fallback to mock data if API returns error
+          setExistingParameters(mockData.createMockParameters());
+        } else {
+          // Fallback to mock data if no data returned
+          setExistingParameters(mockData.createMockParameters());
+        }
+      } catch (error) {
+        console.error("Error fetching existing parameters:", error);
+        // Fallback to mock data on error
+        // setExistingParameters(mockData.createMockParameters());
+      }
+    };
 
-  useEffect(() => {
-    // In a real app, this would fetch existing parameters from the API
-    setExistingParameters(mockData.createMockParameters());
+    if (projectId) {
+      fetchExistingParameters();
+    }
   }, [projectId]);
 
   // Add a new parameter to the list
@@ -140,9 +168,9 @@ const CreateParameters: React.FC = () => {
           
           <Card>
             <CardHeader>
-              <CardTitle>Existing Parameters</CardTitle>
+              <CardTitle>Parameters</CardTitle>
               <CardDescription>
-                Pre-defined parameters you can use
+                Parameters created for this project
               </CardDescription>
             </CardHeader>
             <CardContent className="max-h-80 overflow-y-auto space-y-4">
@@ -175,7 +203,7 @@ const CreateParameters: React.FC = () => {
         
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium">Your Parameters</h3>
+            <h3 className="text-lg font-medium">Added Parameters</h3>
             <span className="text-sm text-muted-foreground">
               {parameters.length} parameter{parameters.length !== 1 && "s"}
             </span>
