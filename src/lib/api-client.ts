@@ -1,88 +1,116 @@
-import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
+import { supabase } from './supabase';
 
-type ApiResult<T> =
-  | {
-      data: T;
-      error?: never;
-    }
-  | {
-      data?: never;
-      error: {
-        message: string;
-        status: number;
-        details?: Record<string, unknown>;
-      };
-    };
-
+// API Client with Supabase integration
 export class ApiClient {
-  static async request<T>(config: AxiosRequestConfig): Promise<ApiResult<T>> {
-    try {
-      const isFormData = config.data instanceof FormData;
+  private static baseURL = '/api';
 
-      const client = axios.create({
-        baseURL: 'https://4psd65hvi6.execute-api.ap-south-1.amazonaws.com/eval',
+  /**
+   * Get authentication headers with Supabase session token
+   */
+  private static async getAuthHeaders(): Promise<HeadersInit> {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Failed to get session for API request:', error.message);
+        return {};
+      }
+
+      if (!session?.access_token) {
+        console.warn('No access token available for API request');
+        return {};
+      }
+
+      return {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      };
+    } catch (error) {
+      console.error('Error getting auth headers:', error);
+      return {
+        'Content-Type': 'application/json',
+      };
+    }
+  }
+
+  /**
+   * Make authenticated API request
+   */
+  private static async makeRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    try {
+      const headers = await this.getAuthHeaders();
+      
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        ...options,
         headers: {
-          ...(config.data && !isFormData
-            ? { 'Content-Type': 'application/json' }
-            : {}),
-          Authorization: `Bearer testtoken`,
+          ...headers,
+          ...options.headers,
         },
       });
-      const response: AxiosResponse<T> = await client.request(config);
-      return { data: response.data };
-    } catch (err) {
-      if (isAxiosError(err)) {
-        console.log(`[API ERROR - ${config.url}]`, err.response?.data);
-        return {
-          error: {
-            message: 'An unknown error occurred',
-            details: err.response?.data,
-            status: err.response?.status || 500,
-          },
-        };
+
+      // Handle authentication errors
+      if (response.status === 401) {
+        console.error('API request unauthorized - user may need to re-authenticate');
+        // Could trigger a re-authentication flow here
+        throw new Error('Authentication required');
       }
-      console.log(`[API ERROR - ${config.url}]`, err);
-      return {
-        error: {
-          message: 'An unknown error occurred',
-          status: 500,
-        },
-      };
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API request failed: ${response.status} ${errorText}`);
+      }
+
+      // Handle empty responses
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      } else {
+        return {} as T;
+      }
+    } catch (error) {
+      console.error(`API request failed for ${endpoint}:`, error);
+      throw error;
     }
   }
 
-  static async get<T>(
-    url: string,
-    params?: Record<string, unknown>,
-  ): Promise<ApiResult<T>> {
-    return this.request<T>({ method: 'GET', url, params });
+  /**
+   * GET request
+   */
+  static async get<T>(endpoint: string): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'GET',
+    });
   }
 
-  static async post<T, D = unknown>(
-    url: string,
-    data?: D,
-  ): Promise<ApiResult<T>> {
-    return this.request<T>({ method: 'POST', url, data });
+  /**
+   * POST request
+   */
+  static async post<T>(endpoint: string, data?: any): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 
-  static async put<T, D = unknown>(
-    url: string,
-    data?: D,
-  ): Promise<ApiResult<T>> {
-    return this.request<T>({ method: 'PUT', url, data });
+  /**
+   * PUT request
+   */
+  static async put<T>(endpoint: string, data?: any): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 
-  static async patch<T, D = unknown>(
-    url: string,
-    data?: D,
-  ): Promise<ApiResult<T>> {
-    return this.request<T>({ method: 'PATCH', url, data });
-  }
-
-  static async delete<T>(
-    url: string,
-    params?: Record<string, unknown>,
-  ): Promise<ApiResult<T>> {
-    return this.request<T>({ method: 'DELETE', url, params });
+  /**
+   * DELETE request
+   */
+  static async delete<T>(endpoint: string): Promise<T> {
+    return this.makeRequest<T>(endpoint, {
+      method: 'DELETE',
+    });
   }
 }
