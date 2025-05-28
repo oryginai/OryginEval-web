@@ -1,9 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { authApi } from '@/services/api';
-import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/lib/supabase';
-import { ApiClient } from '@/lib/api-client';
+import { Session } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -25,95 +22,66 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const isAuth = await authApi.isAuthenticated();
-        if (isAuth) {
-          const userData = await authApi.getCurrentUser();
-          setUser(userData);
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-      } finally {
-        setIsLoading(false);
+    setLoading(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setSession(session);
+        setUser({
+          id: session?.user.id,
+          name: session?.user.user_metadata?.full_name || 'User',
+          email: session?.user.email as string,
+          avatar: session?.user.user_metadata?.avatar_url || 'User',
+        });
       }
-    };
-
-    // Initial auth check
-    checkAuth();
-
-    // Set up auth state change listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-
-        console.log('Supabase user ID:', session.user.id);
-        const response = await ApiClient.post('/accounts-add',{'account_id': session.user.id });
-        console.log('API Response:', response);
-        
-        const userData = await authApi.getCurrentUser();
-        setUser(userData);
-        setIsLoading(false);
-
-
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setIsLoading(false);
-      }
+      setLoading(false);
     });
 
-    // Cleanup subscription on unmount
-    return () => {
-      subscription.unsubscribe();
-    };
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser({
+        id: session?.user.id,
+        name: session?.user.user_metadata?.full_name || 'User',
+        email: session?.user.email as string,
+        avatar: session?.user.user_metadata?.avatar_url || 'User',
+      });
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
-  const login = async () => {
-    try {
-      setIsLoading(true);
-      await authApi.loginWithGoogle();
-      // Note: The actual navigation will happen via the onAuthStateChange listener
-      // after the OAuth redirect completes, and we don't need to manually call navigate
-      // or set the user here because the redirectTo option in loginWithGoogle handles it
-    } catch (error) {
-      setIsLoading(false);
-      toast.error('Login failed', {
-        description: 'Please try again later.',
-      });
-      console.error('Login failed:', error);
-    }
+
+  // Sign in with Google
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/projects`,
+      },
+    });
+    if (error) throw error;
   };
 
-  const logout = async () => {
-    try {
-      setIsLoading(true);
-      await authApi.logout();
-      // User state will be updated by the onAuthStateChange listener
-      navigate('/auth');
-      toast.success('Logged out successfully');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      toast.error('Logout failed', {
-        description: 'Please try again later.',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  // Sign out
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
-
   return (
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
-        isAuthenticated: !!user,
-        login,
-        logout,
+        isLoading: loading,
+        isAuthenticated: !!session,
+        login: signInWithGoogle,
+        logout: signOut,
       }}
     >
       {children}
