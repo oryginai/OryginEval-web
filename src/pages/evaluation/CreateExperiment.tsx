@@ -26,7 +26,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, FileText, Database } from "lucide-react";
+import { Plus, FileText, Database, RefreshCw } from "lucide-react";
 import { Dataset, Parameter } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
@@ -40,8 +40,12 @@ const CreateExperiment: React.FC = () => {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [experimentName, setExperimentName] = useState("");
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
-  const [selectedParameterIds, setSelectedParameterIds] = useState<string[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");  const [selectedParameterIds, setSelectedParameterIds] = useState<string[]>([]);
+  
+  // Cost calculation state
+  const [priceQuoted, setPriceQuoted] = useState(false);
+  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
+  const [isCalculatingCost, setIsCalculatingCost] = useState(false);
   
   // Fetch datasets and parameters from API
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -105,7 +109,6 @@ const CreateExperiment: React.FC = () => {
   const startExperimentCreation = () => {
     setShowForm(true);
   };
-
   // Toggle parameter selection
   const toggleParameter = (parameterId: string) => {
     setSelectedParameterIds((prev) => {
@@ -115,7 +118,48 @@ const CreateExperiment: React.FC = () => {
         return [...prev, parameterId];
       }
     });
-  };  // Handle form submission
+    // Reset price calculation when parameters change
+    setPriceQuoted(false);
+    setEstimatedPrice(null);
+  };
+
+  // Calculate cost estimation
+  const calculateCost = async () => {
+    if (!selectedDatasetId) {
+      toast.error("Please select a dataset first");
+      return;
+    }
+
+    if (selectedParameterIds.length === 0) {
+      toast.error("Please select at least one parameter");
+      return;
+    }
+
+    setIsCalculatingCost(true);
+    try {
+      const payload = {
+        dataset_id: selectedDatasetId,
+        parameter_ids: selectedParameterIds
+      };
+      console.log("Calculating cost with payload:", payload);
+      const response = await ApiClient.post('/experiments-calculate-cost', payload);
+      console.log("Calculate Cost API Response:", response);
+
+      if (response.data && (response.data as any).cost !== undefined) {
+        setEstimatedPrice((response.data as any).cost);
+        setPriceQuoted(true);
+        toast.success("Cost calculated successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to calculate cost");
+      }
+    } catch (error) {
+      console.error("Error calculating cost:", error);
+      toast.error("Failed to calculate cost");
+    } finally {
+      setIsCalculatingCost(false);
+    }
+  };// Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -129,9 +173,13 @@ const CreateExperiment: React.FC = () => {
       toast.error("Please select a dataset");
       return;
     }
-    
-    if (selectedParameterIds.length === 0) {
+      if (selectedParameterIds.length === 0) {
       toast.error("Please select at least one parameter");
+      return;
+    }
+    
+    if (!priceQuoted) {
+      toast.error("Please calculate the cost estimate before creating the experiment");
       return;
     }
     
@@ -350,10 +398,14 @@ const CreateExperiment: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <Select
+            <div className="space-y-4">              <Select
                 value={selectedDatasetId}
-                onValueChange={setSelectedDatasetId}
+                onValueChange={(value) => {
+                  setSelectedDatasetId(value);
+                  // Reset price calculation when dataset changes
+                  setPriceQuoted(false);
+                  setEstimatedPrice(null);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a dataset" />
@@ -470,6 +522,52 @@ const CreateExperiment: React.FC = () => {
                 </div>
               ))}
             </div>
+          </CardContent>        </Card>
+
+        {/* Cost Estimation Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Estimated Price</CardTitle>
+            <CardDescription>
+              Get a price estimate for running this experiment
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col space-y-4">
+              {estimatedPrice !== null ? (
+                <div className="rounded-md bg-muted p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Total Estimated Cost:</span>
+                    <span className="text-xl font-bold">${estimatedPrice.toFixed(2)}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    This estimate is based on the selected parameters and the number of conversations in your dataset.
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={calculateCost}
+                      disabled={isCalculatingCost || !selectedDatasetId || selectedParameterIds.length === 0}
+                      className="gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isCalculatingCost ? 'animate-spin' : ''}`} />
+                      Recalculate
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <Button 
+                    onClick={calculateCost}
+                    disabled={isCalculatingCost || !selectedDatasetId || selectedParameterIds.length === 0}
+                    className="bg-primary hover:bg-orygin-red-hover text-white"
+                  >
+                    {isCalculatingCost ? "Calculating..." : "Estimate your cost"}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -480,11 +578,13 @@ const CreateExperiment: React.FC = () => {
             type="button"
           >
             Cancel
-          </Button>
-          <Button
+          </Button>          <Button
             type="submit"
-            className="bg-primary hover:bg-orygin-red-hover text-white"
-            disabled={isLoading}
+            className={!priceQuoted 
+              ? "bg-muted text-muted-foreground cursor-not-allowed" 
+              : "bg-primary hover:bg-orygin-red-hover text-white"
+            }
+            disabled={isLoading || !priceQuoted}
           >
             {isLoading ? "Creating..." : "Create Experiment"}
           </Button>

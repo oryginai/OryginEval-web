@@ -208,31 +208,33 @@ const SynthesizeDataset: React.FC = () => {
     try {
       // First, save any edits to the temporary dataset
       await saveEdits();
+      navigate(`/projects/${projectId}/datasets`);
+      setIsLoading(false);
       
       // Then create the final dataset entry
-      const datasetData = {
-        dataset: generatedConversations.map(convo => ({
-          id: convo.id,
-          conversation: convo.messages
-        })),
-        project_id: projectId,
-        name: datasetName
-      };
+      // const datasetData = {
+      //   dataset: generatedConversations.map(convo => ({
+      //     id: convo.id,
+      //     conversation: convo.messages
+      //   })),
+      //   project_id: projectId,
+      //   name: datasetName
+      // };
 
-      const response = await ApiClient.post(`/datasets-create?dataset_id=${datasetId}`, datasetData);
-      console.log("Dataset save response:", response);
+      // const response = await ApiClient.post(`/datasets-create?dataset_id=${datasetId}`, datasetData);
+      // console.log("Dataset save response:", response);
 
-      if (response.data || !response.error) {
-        toast.success(`Dataset "${datasetName}" saved successfully`);
-        navigate(`/projects/${projectId}/datasets`);
-      } else {
-        throw new Error("Failed to save dataset");
-      }
+    //   if (response.data || !response.error) {
+    //     toast.success(`Dataset "${datasetName}" saved successfully`);
+    //     navigate(`/projects/${projectId}/datasets`);
+    //   } else {
+    //     throw new Error("Failed to save dataset");
+    //   }
     } catch (error) {
       console.error("Error saving dataset:", error);
-      toast.error("Failed to save dataset");
-    } finally {
-      setIsLoading(false);
+    //   toast.error("Failed to save dataset");
+    // } finally {
+    //   setIsLoading(false);
     }
   };// Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
