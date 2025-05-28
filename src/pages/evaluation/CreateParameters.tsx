@@ -22,6 +22,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ApiClient } from "@/lib/api-client";
+import { v4 as uuidv4 } from 'uuid';
 
 const CreateParameters: React.FC = () => {
   const navigate = useNavigate();
@@ -46,56 +48,41 @@ const CreateParameters: React.FC = () => {
       toast.error("Please fill in all fields");
       return;
     }
-    
-    const newId = `param_${Date.now()}`;
+
+    const parameterBody = {
+      parameter_name: newParameter.name,
+      parameter_description: newParameter.description,
+    };
+    const parameterId = uuidv4();
+    const response = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, parameterBody)
+    console.log("Add Parameter API Response:", response);
     setParameters([
       ...parameters,
       {
-        id: newId,
+        id: parameterId,
         name: newParameter.name,
         description: newParameter.description,
-        project_id: projectId || "",
         created_at: new Date().toISOString(),
-      },
-    ]);
+        project_id: projectId || "",
+      }]);
+
+    // const newId = `param_${Date.now()}`;
+    // setParameters([
+    //   ...parameters,
+    //   {
+    //     id: newId,
+    //     name: newParameter.name,
+    //     description: newParameter.description,
+    //     project_id: projectId || "",
+    //     created_at: new Date().toISOString(),
+    //   },
+    // ]);
     
     setNewParameter({ name: "", description: "" });
   };
-
   // Remove a parameter from the list
   const removeParameter = (id: string) => {
     setParameters(parameters.filter((param) => param.id !== id));
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (parameters.length === 0) {
-      toast.error("Please add at least one parameter");
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // In a real app, this would call the API to create the parameters
-      for (const param of parameters) {
-        await parameterApi.createParameter(
-          projectId || "",
-          param.name,
-          param.description
-        );
-      }
-      
-      toast.success("Parameters created successfully");
-      navigate(`/projects/${projectId}/evaluation`);
-    } catch (error) {
-      console.error("Error creating parameters:", error);
-      toast.success("Parameters created successfully");
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -107,7 +94,7 @@ const CreateParameters: React.FC = () => {
         </p>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="space-y-8">
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -222,26 +209,8 @@ const CreateParameters: React.FC = () => {
                 No parameters added yet. Add some parameters above.
               </p>
             </div>
-          )}
-        </div>
-        
-        <div className="flex justify-end space-x-4">
-          <Button 
-            variant="outline" 
-            onClick={() => navigate(`/projects/${projectId}/evaluation`)}
-            type="button"
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit"
-            className="bg-primary hover:bg-orygin-red-hover text-white"
-            disabled={isLoading || parameters.length === 0}
-          >
-            {isLoading ? "Saving..." : "Save Parameters"}
-          </Button>
-        </div>
-      </form>
+          )}        </div>
+      </div>
     </div>
   );
 };
