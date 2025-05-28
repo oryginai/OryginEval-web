@@ -71,11 +71,11 @@ export const Sidebar: React.FC = () => {
       //   path: `/projects/${projectId}/dashboard`,
       // });
       
-      sections.push({
-        title: "Report",
-        icon: BarChart3,
-        path: `/projects/${projectId}/report`,
-      });
+      // sections.push({
+      //   title: "Report",
+      //   icon: BarChart3,
+      //   path: `/projects/${projectId}/report`,
+      // });
     }
 
     return sections;

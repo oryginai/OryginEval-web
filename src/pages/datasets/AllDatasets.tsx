@@ -91,7 +91,7 @@ const AllDatasets: React.FC = () => {
     if (!datasetToDelete) return;
 
     try {
-      const response = await ApiClient.post(`/datasets-delete?dataset_id=${datasetToDelete.id}`, {});
+      const response = await ApiClient.post(`/datasets-delete?dataset_id=${datasetToDelete.id}&project_id=${projectId}`, {});
       console.log("Delete Dataset API Response:", response);
       
       if (response.data || !response.error) {

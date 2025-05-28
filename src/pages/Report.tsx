@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,6 +43,7 @@ import {
   Line,
   Legend,
 } from "recharts";
+import { ApiClient } from "@/lib/api-client";
 
 // Define interfaces for the new data structure
 interface EvaluationDetail {
@@ -72,64 +73,265 @@ interface ReportData {
   eval_results: EvalResult[];
 }
 
-// Sample data provided by the user
-const sampleReportData: ReportData = {
-  overall_eval_results: {
-    conversations_tested: 10,
-    average_response_time: 4.79,
-    Hallucination: 0.17,
-    "Semantic Similarity": 0.91,
-    "Accuracy Score": 0.88, // Placeholder value
-    "Toxicity Score": 0.05, // Placeholder value
-  },
-  insights: [
-    "The bot occasionally repeats questions, leading to a slightly higher hallucination score in some conversations.",
-    "The bot tends to provide a complete itinerary in the final response, which goes beyond the scope of the ideal chat flow.",
-    "Semantic similarity scores are generally high, indicating that the bot effectively captures user preferences and maintains a relevant conversation flow.",
-    "Hallucination scores are generally low, suggesting that the bot's responses are mostly grounded and relevant to the user's input.",
-  ],
-  eval_results: [
-    {
-      convoid: "convoid1",
-      response_time: 4.7,
-      evaluations: [
-        { name: "Hallucination", score: 0.7, comment: "The assistant in the actual chat asks for the same information multiple times, like name and travel companions. Also, it provides the entire itinerary at the end, which wasn't in the ideal chat. Therefore, the hallucination score is high." },
-        { name: "Semantic Similarity", score: 0.95, comment: "The actual chat follows the same flow and asks the same questions as the ideal chat, with minor variations in phrasing. The information gathered is the same, and the final output is a trip plan, which wasn't explicitly part of the ideal chat, but is a logical continuation. Therefore, the semantic similarity is high." },
-      ],
-    },
-    {
-      convoid: "convoid2",
-      response_time: 5.92,
-      evaluations: [
-        { name: "Hallucination", score: 0.4, comment: "The actual chat has some hallucinations. The assistant is asking the same question multiple times. Also, the assistant is providing irrelevant responses." },
-        { name: "Semantic Similarity", score: 0.85, comment: "The actual chat follows a similar flow to the ideal chat, asking relevant questions to gather information about the user's preferences for their trip. However, the ideal chat's initial greetings and questions are slightly more tailored and welcoming. The actual chat also provides a trip plan at the end, which is beyond the scope of the ideal chat." },
-      ],
-    },
-    { convoid: "convoid3", response_time: 5.91, evaluations: [{ name: "Hallucination", score: 0.0, comment: "No hallucination." },{ name: "Semantic Similarity", score: 0.95, comment: "Very similar." }] },
-    { convoid: "convoid4", response_time: 3.66, evaluations: [{ name: "Hallucination", score: 0.0, comment: "No hallucination." },{ name: "Semantic Similarity", score: 0.92, comment: "Highly similar." }] },
-    { convoid: "convoid5", response_time: 3.72, evaluations: [{ name: "Hallucination", score: 0.1, comment: "Minor hallucination." },{ name: "Semantic Similarity", score: 0.85, comment: "Similar, but final response differs." }] },
-    { convoid: "convoid6", response_time: 5.29, evaluations: [{ name: "Hallucination", score: 0.0, comment: "No hallucination." },{ name: "Semantic Similarity", score: 0.95, comment: "Quite similar." }] },
-    { convoid: "convoid7", response_time: 4.54, evaluations: [{ name: "Hallucination", score: 0.3, comment: "Some hallucination, irrelevant suggestions." },{ name: "Semantic Similarity", score: 0.85, comment: "Very similar flow." }] },
-    { convoid: "convoid8", response_time: 4.6, evaluations: [{ name: "Hallucination", score: 0.0, comment: "No hallucination." },{ name: "Semantic Similarity", score: 0.95, comment: "Closely mirrors ideal chat." }] },
-    { convoid: "convoid9", response_time: 4.47, evaluations: [{ name: "Hallucination", score: 0.0, comment: "No hallucination." },{ name: "Semantic Similarity", score: 0.9, comment: "Similar flow, more conversational." }] },
-    { convoid: "convoid10", response_time: 5.1, evaluations: [{ name: "Hallucination", score: 0.15, comment: "Minor deviations." },{ name: "Semantic Similarity", score: 0.95, comment: "Closely aligned." }] },
-  ],
-};
-
 const Report: React.FC = () => {
   const navigate = useNavigate();
-  // const { projectId } = useParams<{ projectId: string }>(); // Keep if needed for navigation
+  const { projectId, experimentId } = useParams<{ projectId: string; experimentId: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate data fetching
-    setIsLoading(true);
-    setTimeout(() => {
-      setReportData(sampleReportData);
-      setIsLoading(false);
-    }, 1000); // Simulate network delay
-  }, []);
+    const fetchExperimentDetails = async () => {
+      if (!experimentId) {
+        setError("No experiment ID provided");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+          const response = await ApiClient.get(`/experiments-details?experiment_id=${experimentId}`);        console.log("Experiment details API Response:", response);
+        console.log("Response data:", response.data);
+        console.log("Experiment object:", (response.data as any)?.experiment);
+        console.log("Result check:", (response.data as any)?.experiment?.result);
+        
+        if (response.data && (response.data as any).experiment && (response.data as any).experiment.result && Array.isArray((response.data as any).experiment.result)) {
+          const apiData = (response.data as any).experiment;
+          
+          // Transform API response to ReportData interface
+          const transformedData: ReportData = transformApiResponseToReportData(apiData);
+          setReportData(transformedData);
+        } else {
+          console.error("API Response structure issue:", {
+            hasData: !!response.data,
+            hasExperiment: !!(response.data as any)?.experiment,
+            hasResult: !!(response.data as any)?.experiment?.result,
+            resultType: typeof (response.data as any)?.experiment?.result,
+            isArray: Array.isArray((response.data as any)?.experiment?.result)
+          });
+          throw new Error("No experiment data found");
+        }
+      } catch (error) {
+        console.error("Error fetching experiment details:", error);
+        setError("Failed to load experiment details");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchExperimentDetails();
+  }, [experimentId]);
+
+  // Helper function to transform API response to ReportData interface
+  const transformApiResponseToReportData = (apiData: any): ReportData => {
+    const results = apiData.result || [];
+    
+    // Calculate overall metrics from individual conversation results
+    const totalConversations = results.length;
+    let totalResponseTime = 0;
+    let hallucinationScores: number[] = [];
+    let semanticSimilarityScores: number[] = [];
+    let accuracyScores: number[] = [];
+    let toxicityScores: number[] = [];
+    
+    const evalResults: EvalResult[] = results.map((conv: any) => {
+      totalResponseTime += conv.response_time || 0;
+        const evaluations: EvaluationDetail[] = (conv.evaluations || []).map((evaluation: any) => {
+        const score = evaluation.score || 0;
+        
+        // Collect scores for overall calculation
+        switch (evaluation.name) {
+          case "Hallucination":
+            hallucinationScores.push(score);
+            break;
+          case "Semantic Similarity":
+            semanticSimilarityScores.push(score);
+            break;
+          case "Accuracy Score":
+          case "Accuracy":
+            accuracyScores.push(score);
+            break;
+          case "Toxicity Score":
+          case "Toxicity":
+            toxicityScores.push(score);
+            break;
+        }
+        
+        return {
+          name: evaluation.name,
+          score: score,
+          comment: evaluation.comment || ""
+        };
+      });
+      
+      return {
+        convoid: conv.convoid || conv.conversationId || "Unknown",
+        response_time: conv.response_time || 0,
+        evaluations
+      };
+    });
+    
+    // Calculate averages
+    const avgResponseTime = totalConversations > 0 ? totalResponseTime / totalConversations : 0;
+    const avgHallucination = hallucinationScores.length > 0 
+      ? hallucinationScores.reduce((sum, score) => sum + score, 0) / hallucinationScores.length 
+      : 0;
+    const avgSemanticSimilarity = semanticSimilarityScores.length > 0 
+      ? semanticSimilarityScores.reduce((sum, score) => sum + score, 0) / semanticSimilarityScores.length 
+      : 0;
+    const avgAccuracy = accuracyScores.length > 0 
+      ? accuracyScores.reduce((sum, score) => sum + score, 0) / accuracyScores.length 
+      : 0;
+    const avgToxicity = toxicityScores.length > 0 
+      ? toxicityScores.reduce((sum, score) => sum + score, 0) / toxicityScores.length 
+      : 0;
+    
+    // Generate insights based on the data
+    const insights = generateInsights(avgHallucination, avgSemanticSimilarity, avgAccuracy, avgToxicity, evalResults);
+    
+    return {
+      overall_eval_results: {
+        conversations_tested: totalConversations,
+        average_response_time: avgResponseTime,
+        Hallucination: avgHallucination,
+        "Semantic Similarity": avgSemanticSimilarity,
+        "Accuracy Score": avgAccuracy,
+        "Toxicity Score": avgToxicity
+      },
+      insights,
+      eval_results: evalResults
+    };
+  };
+
+  // Helper function to generate insights
+  const generateInsights = (
+    hallucination: number, 
+    semanticSimilarity: number, 
+    accuracy: number, 
+    toxicity: number,
+    evalResults: EvalResult[]
+  ): string[] => {
+    const insights: string[] = [];
+    
+    if (hallucination > 0.3) {
+      insights.push("Hallucination scores are elevated, indicating the model may be generating inaccurate or fabricated information.");
+    } else if (hallucination < 0.1) {
+      insights.push("Hallucination scores are low, suggesting the model's responses are generally grounded and accurate.");
+    }
+    
+    if (semanticSimilarity > 0.9) {
+      insights.push("Semantic similarity scores are excellent, indicating strong alignment with expected responses.");
+    } else if (semanticSimilarity < 0.7) {
+      insights.push("Semantic similarity scores suggest room for improvement in response relevance and alignment.");
+    }
+    
+    if (accuracy > 0.8) {
+      insights.push("High accuracy scores demonstrate strong performance in providing correct information.");
+    } else if (accuracy < 0.6) {
+      insights.push("Accuracy scores indicate significant room for improvement in response correctness.");
+    }
+    
+    if (toxicity > 0.1) {
+      insights.push("Toxicity levels require attention to ensure appropriate and safe responses.");
+    } else {
+      insights.push("Toxicity scores are low, indicating appropriate and safe response generation.");
+    }
+    
+    // Response time insights
+    const avgResponseTime = evalResults.reduce((sum, result) => sum + result.response_time, 0) / evalResults.length;
+    if (avgResponseTime > 5) {
+      insights.push("Response times are above average and may impact user experience.");
+    } else if (avgResponseTime < 2) {
+      insights.push("Response times are excellent, providing quick user interactions.");
+    }
+    
+    return insights.length > 0 ? insights : ["Analysis complete. Review individual metrics for detailed performance insights."];
+  };
+
+  // Helper function to get parameter score cards
+  const getParameterScoreCards = (reportData: ReportData) => {
+    const parameters: Array<{
+      name: string;
+      value: string;
+      note: string;
+      grade: string;
+      gradeColor: string;
+      IconComponent: any;
+    }> = [];    // Get unique parameter names from eval results
+    const uniqueParams = new Set<string>();
+    reportData.eval_results.forEach(result => {
+      result.evaluations.forEach(evaluation => {
+        uniqueParams.add(evaluation.name);
+      });
+    });
+
+    uniqueParams.forEach(paramName => {
+      // Calculate average score for this parameter
+      const scores = reportData.eval_results
+        .flatMap(result => result.evaluations)
+        .filter(evaluation => evaluation.name === paramName)
+        .map(evaluation => evaluation.score);
+      
+      const avgScore = scores.length > 0 
+        ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+        : 0;
+
+      const grade = getGrade(avgScore);
+      const IconComponent = getParameterIcon(paramName);
+
+      parameters.push({
+        name: paramName,
+        value: avgScore.toFixed(2),
+        note: getParameterNote(paramName),
+        grade: grade.grade,
+        gradeColor: grade.color === "text-green-500" ? "bg-green-100 text-green-800" :
+                   grade.color === "text-blue-500" ? "bg-blue-100 text-blue-800" :
+                   grade.color === "text-yellow-500" ? "bg-yellow-100 text-yellow-800" :
+                   grade.color === "text-orange-500" ? "bg-orange-100 text-orange-800" :
+                   "bg-red-100 text-red-800",
+        IconComponent
+      });
+    });
+
+    return parameters;
+  };
+
+  // Helper function to get icon for parameter
+  const getParameterIcon = (paramName: string) => {
+    switch (paramName.toLowerCase()) {
+      case "hallucination":
+        return AlertTriangle;
+      case "semantic similarity":
+        return Smile;
+      case "accuracy score":
+      case "accuracy":
+        return Target;
+      case "toxicity score":
+      case "toxicity":
+        return ShieldAlert;
+      default:
+        return TrendingUp;
+    }
+  };
+
+  // Helper function to get note for parameter
+  const getParameterNote = (paramName: string): string => {
+    switch (paramName.toLowerCase()) {
+      case "hallucination":
+        return "Lower is better (0-1 scale)";
+      case "semantic similarity":
+        return "Higher is better (0-1 scale)";
+      case "accuracy score":
+      case "accuracy":
+        return "Higher is better (0-1 scale)";
+      case "toxicity score":
+      case "toxicity":
+        return "Lower is better (0-1 scale)";
+      default:
+        return "Parameter score (0-1 scale)";
+    }
+  };
 
   // Helper function to get letter grade and color
   const getGrade = (score: number): { grade: string; color: string } => {
@@ -139,18 +341,42 @@ const Report: React.FC = () => {
     if (score >= 0.6) return { grade: "D", color: "text-orange-500" };
     return { grade: "F", color: "text-red-500" };
   };
-  
-  // Prepare chart data
+    // Prepare chart data - dynamically based on actual parameters from API response
   const overallMetricsForChart = reportData
-    ? [
-        { subject: "Hallucination", score: reportData.overall_eval_results.Hallucination, fullMark: 1 },
-        { subject: "Semantic Similarity", score: reportData.overall_eval_results["Semantic Similarity"], fullMark: 1 },
-        { subject: "Accuracy", score: reportData.overall_eval_results["Accuracy Score"] || 0, fullMark: 1 },
-        // Toxicity is often better represented as lower is better, adjust if needed for radar.
-        // For this radar, we'll assume higher score means less toxicity for consistency, or invert the value.
-        // Or, show it separately. For now, including it as higher is better (1-toxicity).
-        { subject: "Non-Toxicity", score: 1 - (reportData.overall_eval_results["Toxicity Score"] || 0), fullMark: 1 },
-      ]
+    ? (() => {
+        // Get unique parameter names from eval results
+        const uniqueParams = new Set<string>();
+        reportData.eval_results.forEach(result => {
+          result.evaluations.forEach(evaluation => {
+            uniqueParams.add(evaluation.name);
+          });
+        });
+
+        // Create chart data for each parameter
+        return Array.from(uniqueParams).map(paramName => {
+          // Calculate average score for this parameter
+          const scores = reportData.eval_results
+            .flatMap(result => result.evaluations)
+            .filter(evaluation => evaluation.name === paramName)
+            .map(evaluation => evaluation.score);
+          
+          const avgScore = scores.length > 0 
+            ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+            : 0;
+
+          // For parameters where lower is better (like Toxicity), invert the score for better visualization
+          const displayScore = paramName.toLowerCase().includes('toxicity') || 
+                              paramName.toLowerCase().includes('hallucination')
+            ? 1 - avgScore  // Invert so higher bars represent better performance
+            : avgScore;
+
+          return {
+            subject: paramName,
+            score: displayScore,
+            fullMark: 1
+          };
+        });
+      })()
     : [];
 
   const conversationScoresForChart = reportData
@@ -203,23 +429,36 @@ const Report: React.FC = () => {
       </div>
     );
   }
-
   if (!reportData) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center p-6">
         <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
           <Info className="h-8 w-8 text-primary" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">No Report Data Available</h3>
+        <h3 className="text-xl font-semibold mb-2">
+          {error || "No Report Data Available"}
+        </h3>
         <p className="text-muted-foreground mb-6">
-          There was an issue loading the report data or no data exists.
+          {error 
+            ? "There was an issue loading the experiment data. Please try again."
+            : "There was an issue loading the report data or no data exists."
+          }
         </p>
-        <Button
-          onClick={() => navigate("/")} // Navigate to a relevant page, e.g., dashboard or projects
-          className="gap-2 bg-primary hover:bg-orygin-red-hover text-white"
-        >
-          Go to Dashboard
-        </Button>
+        <div className="flex gap-4">
+          <Button
+            onClick={() => navigate(`/projects/${projectId}/evaluation/history`)}
+            variant="outline"
+          >
+            Back to Experiments
+          </Button>
+          <Button
+            onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
+            className="gap-2 bg-primary hover:bg-orygin-red-hover text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Create New Experiment
+          </Button>
+        </div>
       </div>
     );
   }
@@ -233,14 +472,41 @@ const Report: React.FC = () => {
             <p className="text-muted-foreground">
               Detailed analysis of the latest evaluation run.
             </p>
-          </div>
-          <Button
-            onClick={() => navigate("/projects/projectId/evaluation/create-experiment")} // Replace projectId with actual if available
+          </div>          <Button
+            onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
             className="gap-2 bg-primary hover:bg-orygin-red-hover text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
             New Experiment
-          </Button>
+          </Button>        </div>
+
+        {/* Parameter Score Cards */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Parameter Scores</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {getParameterScoreCards(reportData).map((param, index) => (
+              <Card key={index} className="shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {param.name}
+                  </CardTitle>
+                  <param.IconComponent className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">{param.value}</div>
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-xs text-muted-foreground">{param.note}</p>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded ${param.gradeColor}`}>
+                      {param.grade}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
         {/* Overall Metrics Cards */}

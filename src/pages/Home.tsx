@@ -205,7 +205,7 @@ const Home: React.FC = () => {
     if (!parameterToDelete || !projectId) return;
 
     try {
-      const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}`, {});
+      const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}&project_id=${projectId}`, {});
       console.log("Delete Parameter API Response:", response);
       
       if (response.data || !response.error) {

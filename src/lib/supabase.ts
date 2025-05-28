@@ -6,6 +6,6 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
   },
 });
