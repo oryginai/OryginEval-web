@@ -9,12 +9,24 @@ import { toast } from "@/components/ui/sonner";
 import { Plus, MoreVertical, Trash2, Database, Upload, FileText } from "lucide-react";
 import { Dataset } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const AllDatasets: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState<{ id: string; name: string } | null>(null);
   // Fetch datasets
   useEffect(() => {
     const fetchDatasets = async () => {
@@ -68,19 +80,35 @@ const AllDatasets: React.FC = () => {
     });
   };
   
-  // Delete dataset (mock)
-  const deleteDataset = (id: string) => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 500)), 
-      {
-        loading: "Deleting dataset...",
-        success: () => {
-          setDatasets(datasets.filter(dataset => dataset.id !== id));
-          return "Dataset deleted successfully";
-        },
-        error: "Failed to delete dataset"
+  // Handle delete dataset click - open confirmation dialog
+  const handleDeleteClick = (id: string, name: string) => {
+    setDatasetToDelete({ id, name });
+    setDeleteConfirmOpen(true);
+  };
+
+  // Delete dataset with API call
+  const deleteDataset = async () => {
+    if (!datasetToDelete) return;
+
+    try {
+      const response = await ApiClient.post(`/datasets-delete?dataset_id=${datasetToDelete.id}`, {});
+      console.log("Delete Dataset API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Remove dataset from local state
+        setDatasets(datasets.filter(dataset => dataset.id !== datasetToDelete.id));
+        toast.success("Dataset deleted successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to delete dataset");
       }
-    );
+    } catch (error) {
+      console.error("Error deleting dataset:", error);
+      toast.error("Failed to delete dataset");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDatasetToDelete(null);
+    }
   };
 
   return (
@@ -160,13 +188,12 @@ const AllDatasets: React.FC = () => {
                               <MoreVertical className="h-4 w-4" />
                               <span className="sr-only">Open menu</span>
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          </DropdownMenuTrigger>                          <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}>
                               <FileText className="mr-2 h-4 w-4" />
                               Use in Experiment
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteDataset(dataset.id)}>
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteClick(dataset.id, dataset.name)}>
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
                             </DropdownMenuItem>
@@ -210,6 +237,30 @@ const AllDatasets: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Dataset Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the dataset
+              "{datasetToDelete?.name}" and remove all its conversations from your project.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDatasetToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteDataset}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

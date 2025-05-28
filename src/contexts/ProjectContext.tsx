@@ -105,12 +105,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         'labrat': {'endpoint': data.labrat_json?.endpoint || ''}
       };
 
+      const projectId = uuidv4();
       const res = await ApiClient.post<Project>(
-        `/projects-create?project_id=${uuidv4()}&account_id=${user?.id || ''}`,
+        `/projects-create?project_id=${projectId}&account_id=${user?.id || ''}`,
         projectDataWithApiKey,
       );
       if (res.data) {
         setProjects(prev => [...prev, res.data]);
+
+        // Create the default parameters for the new project
+        const parameterBody1 = {parameter_name: "Hallucination",parameter_description: "Measures how much the output contains false or made-up information.",};
+        const parameterId1 = uuidv4();
+        const response1 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId1}`, parameterBody1)
+        console.log("Add Parameter API Response:", response1);
+        const parameterBody2 = {parameter_name: "Relevance",parameter_description: "Assesses how well the response aligns with the prompt or topic.",};
+        const parameterId2 = uuidv4();
+        const response2 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId2}`, parameterBody2)
+        console.log("Add Parameter API Response:", response2);
+        const parameterBody3 = {parameter_name: "Toxicity",parameter_description: "Indicates the presence of harmful or inappropriate language.",};
+        const parameterId3 = uuidv4();
+        const response3 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId3}`, parameterBody3)
+        console.log("Add Parameter API Response:", response3);
+
+
       } else {
         toast.error(res.error?.message || 'Failed to create project');
       }
@@ -142,21 +159,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
   const deleteProject = async (id: string) => {
     setIsLoading(true);
     try {
-      const res = await ApiClient.delete<Project>(
+      const res = await ApiClient.post<any>(
         `/projects-delete?project_id=${id}`,
+        {}
       );
       if (res.data) {
         setProjects(prev => prev.filter(p => p.id !== id));
         if (currentProject?.id === id) {
           setCurrentProject(null);
         }
+        toast.success('Project deleted successfully');
       } else {
         toast.error(res.error?.message || 'Failed to delete project');
       }
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error('Failed to delete project');
     } finally {
       setIsLoading(false);
     }

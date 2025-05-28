@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react"; // Added ChevronDown and ChevronRight
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/contexts/ProjectContext";
@@ -7,7 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { mockData } from "@/services/api";
+import { toast } from "@/components/ui/sonner";
+import { mockData, Parameter } from "@/services/api";
+import { ApiClient } from "@/lib/api-client";
+import { v4 as uuidv4 } from 'uuid';
 import {
   Card,
   CardContent,
@@ -16,6 +19,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Types for the quick experiment flow
 interface Message {
@@ -28,59 +41,87 @@ interface Conversation {
   messages: Message[];
 }
 
+// Enhanced parameter interface for Home page
+interface HomeParameter {
+  id: string;
+  name: string;
+  description: string;
+  selected: boolean;
+  isExpanded: boolean;
+}
+
 const Home: React.FC = () => {
   const { currentProject } = useProject();
   const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
   const [step, setStep] = useState(0);
   const [showCreateFlow, setShowCreateFlow] = useState(false);
   const [priceQuoted, setPriceQuoted] = useState(false);
   const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
+  const [isCalculatingCost, setIsCalculatingCost] = useState(false);
+  const [datasetId, setDatasetId] = useState<string | null>(null);
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
-  const [botInstructions, setBotInstructions] = useState("");
-  const initialParameters = [
-    {
-      id: "param-1",
-      name: "Semantic Similarity",
-      description: "Measures how closely the assistant\\\'s response matches the intended meaning or context of the user\\\'s message.",
-      selected: true,
-      isExpanded: false
-    },
-    {
-      id: "param-2",
-      name: "Hallucination",
-      description: "Checks if the assistant generates information that is not supported by the input or is factually incorrect.",
-      selected: true,
-      isExpanded: false
-    },
-    {
-      id: "param-3",
-      name: "Toxicity",
-      description: "Evaluates whether the assistant\\\'s response contains harmful, offensive, or inappropriate language.",
-      selected: true,
-      isExpanded: false
-    },
-    {
-      id: "param-4", 
-      name: "Accuracy",
-      description: "Measures the factual correctness and relevance of the information provided.",
-      selected: true, 
-      isExpanded: true // "Accuracy" is expanded by default
-    }
-  ];
-  const [parameters, setParameters] = useState(initialParameters);
+  const [botInstructions, setBotInstructions] = useState("");  const [parameters, setParameters] = useState<HomeParameter[]>([]);
+  const [isLoadingParameters, setIsLoadingParameters] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [parameterToDelete, setParameterToDelete] = useState<{ id: string; index: number } | null>(null);
+  const [newParameter, setNewParameter] = useState({
+    name: "",
+    description: "",
+  });
 
-  const startExperimentCreation = () => {
+  // Fetch parameters when entering step 2
+  useEffect(() => {
+    if (step === 2 && projectId) {
+      fetchParameters();
+    }
+  }, [step, projectId]);
+
+  const fetchParameters = async () => {
+    setIsLoadingParameters(true);
+    try {
+      const response = await ApiClient.get(`/parameters-list?project_id=${projectId}`);
+      console.log("Fetch Parameters API Response:", response);
+      
+      if (response.data && (response.data as any).parameters) {
+        // Map the API response to HomeParameter interface
+        const mappedParameters = (response.data as any).parameters.map((param: any) => ({
+          id: param.parameter_id,
+          name: param.name,
+          description: param.description,
+          selected: true,
+          isExpanded: false
+        }));
+        setParameters(mappedParameters);
+      } else if (response.error) {
+        console.error("API Error:", response.error);
+        // Fallback to empty array
+        setParameters([]);
+      } else {
+        // Fallback to empty array
+        setParameters([]);
+      }
+    } catch (error) {
+      console.error("Error fetching parameters:", error);
+      setParameters([]);
+    } finally {
+      setIsLoadingParameters(false);
+    }
+  };  const startExperimentCreation = () => {
     setStep(0);
     setShowCreateFlow(true);
     setBotInstructions("");
     setPriceQuoted(false);
     setEstimatedPrice(null);
+    setIsCalculatingCost(false);
+    setDatasetId(null);
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
-    setParameters(initialParameters); // Reset parameters, "Accuracy" will be expanded as per initialParameters
+    setParameters([]); // Reset parameters - they will be fetched when step 2 is reached
+    setNewParameter({ name: "", description: "" });
   };
 
   // Add a new conversation sample
@@ -117,33 +158,77 @@ const Home: React.FC = () => {
   const removeConversation = (index: number) => {
     const updatedConversations = sampleConversations.filter((_, i) => i !== index);
     setSampleConversations(updatedConversations);
+  };  // Add a new parameter
+  const addParameter = async () => {
+    if (!newParameter.name.trim() || !newParameter.description.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    try {
+      const parameterBody = {
+        parameter_name: newParameter.name,
+        parameter_description: newParameter.description,
+      };
+      const parameterId = uuidv4();
+      const response = await ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, parameterBody);
+      console.log("Add Parameter API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Add the new parameter to local state
+        const newParam: HomeParameter = {
+          id: parameterId,
+          name: newParameter.name,
+          description: newParameter.description,
+          selected: true,
+          isExpanded: true
+        };
+        setParameters([...parameters, newParam]);
+        setNewParameter({ name: "", description: "" });
+        toast.success("Parameter created successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to create parameter");
+      }
+    } catch (error) {
+      console.error("Error creating parameter:", error);
+      toast.error("Failed to create parameter");
+    }  };
+  // Handle delete parameter click - open confirmation dialog
+  const handleDeleteClick = (index: number) => {
+    const parameter = parameters[index];
+    setParameterToDelete({ id: parameter.id, index });
+    setDeleteConfirmOpen(true);
   };
-  // Add a new parameter
-  const addParameter = () => {
-    const newParamId = `param-${parameters.length + 1}`;
-    setParameters(
-      parameters.map(p => ({ ...p, isExpanded: false })).concat([
-        { 
-          id: newParamId, 
-          name: "", 
-          description: "", 
-          selected: true, 
-          isExpanded: true // New parameter is expanded by default
-        }
-      ])
-    );
+  // Delete parameter with API call
+  const deleteParameter = async () => {
+    if (!parameterToDelete || !projectId) return;
+
+    try {
+      const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}`, {});
+      console.log("Delete Parameter API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Remove parameter from local state
+        const updatedParameters = parameters.filter((_, i) => i !== parameterToDelete.index);
+        setParameters(updatedParameters);
+        toast.success("Parameter deleted successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to delete parameter");
+      }
+    } catch (error) {
+      console.error("Error deleting parameter:", error);
+      toast.error("Failed to delete parameter");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setParameterToDelete(null);
+    }
   };
 
-  // Update a parameter
-  const updateParameter = (index: number, field: "name" | "description", value: string) => {
-    const updatedParameters = [...parameters];
-    updatedParameters[index][field] = value;
-    setParameters(updatedParameters);
-  };
-  // Remove a parameter
+  // Remove a parameter (legacy function - now using delete confirmation)
   const removeParameter = (index: number) => {
-    const updatedParameters = parameters.filter((_, i) => i !== index);
-    setParameters(updatedParameters);
+    handleDeleteClick(index);
   };
   
   // Toggle parameter selection
@@ -152,17 +237,11 @@ const Home: React.FC = () => {
     updatedParameters[index].selected = !updatedParameters[index].selected;
     setParameters(updatedParameters);
   };
-
   // Toggle parameter expansion
   const toggleParameterExpansion = (index: number) => {
-    const isCustomParameter = index >= 3;
-    if (!isCustomParameter) return; // Do nothing for default parameters
-
     const isCurrentlyExpanded = parameters[index].isExpanded;
 
     setParameters(parameters.map((param, i) => {
-      if (i < 3) return param; // Default parameters are untouched
-
       if (i === index) {
         return { ...param, isExpanded: !param.isExpanded };
       } else {
@@ -170,7 +249,48 @@ const Home: React.FC = () => {
         // If we are collapsing the current one, others remain as they are.
         return { ...param, isExpanded: !isCurrentlyExpanded ? false : param.isExpanded };
       }
-    }));
+    }));  };
+
+  // Calculate cost estimation
+  const calculateCost = async () => {
+    if (!datasetId) {
+      toast.error("No dataset available for cost calculation");
+      return;
+    }
+
+    const selectedParameterIds = parameters
+      .filter(param => param.selected)
+      .map(param => param.id);
+
+    if (selectedParameterIds.length === 0) {
+      toast.error("Please select at least one parameter");
+      return;
+    }
+
+    setIsCalculatingCost(true);
+    try {
+      const payload = {
+        dataset_id: datasetId,
+        parameter_ids: selectedParameterIds
+      };
+      console.log("Calculating cost with payload:", payload);
+      const response = await ApiClient.post('/experiments-calculate-cost', payload);
+      console.log("Calculate Cost API Response:", response);
+
+      if (response.data && (response.data as any).cost !== undefined) {
+        setEstimatedPrice((response.data as any).cost);
+        setPriceQuoted(true);
+        toast.success("Cost calculated successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to calculate cost");
+      }
+    } catch (error) {
+      console.error("Error calculating cost:", error);
+      toast.error("Failed to calculate cost");
+    } finally {
+      setIsCalculatingCost(false);
+    }
   };
 
   // Handle next step in the wizard
@@ -196,23 +316,15 @@ const Home: React.FC = () => {
           ...mockData.createMockConversations(5)
         ]);
         setStep(1);
-      }, 500);
-    } else if (step === 1) {
-      // Validate selected conversations (all are selected by default)
-      setStep(2);    } else if (step === 2) {
-      // Validate parameters
-      const customParameters = parameters.slice(3); // Skip the default parameters
-      const isValid = customParameters.every(param => 
-        param.name.trim().length > 0 && param.description.trim().length > 0
-      );
-      
+      }, 500);    } else if (step === 1) {
+      // Validate selected conversations and simulate dataset creation
+      // In a real app, this would call the API to create a dataset from the conversations
+      const generatedDatasetId = uuidv4();
+      setDatasetId(generatedDatasetId);
+      console.log("Generated dataset ID:", generatedDatasetId);
+      setStep(2);} else if (step === 2) {
       // Check if at least one parameter is selected
       const hasSelectedParam = parameters.some(param => param.selected);
-      
-      if (!isValid) {
-        alert("Please fill in all parameter names and descriptions");
-        return;
-      }
       
       if (!hasSelectedParam) {
         alert("Please select at least one parameter");
@@ -410,133 +522,147 @@ const Home: React.FC = () => {
             ))}
           </div>
         </div>
-      )}
-        {step === 2 && (
+      )}        {step === 2 && (
         <div className="space-y-6">
           <p className="text-muted-foreground">
-            Define the parameters that will be used to evaluate the conversations. Select which parameters you want to include in this experiment.
+            Select parameters to evaluate your conversations. You can also create new parameters for your specific evaluation needs.
           </p>
           
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Parameters</CardTitle>
-              <CardDescription>
-                Choose the parameters to evaluate against
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Default parameters (first 3) cannot be edited or removed */}
-                {parameters.slice(0, 3).map((param, i) => (
-                  <div
-                    key={param.id}
-                    className="flex items-start space-x-3 py-2"
-                  >
-                    <Checkbox
-                      id={param.id}
-                      checked={param.selected}
-                      onCheckedChange={() => toggleParameter(i)}
-                      disabled={true} // Default parameters are always selected
-                    />
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor={param.id}
-                        className="font-medium cursor-pointer"
-                      >
-                        {param.name}
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        {param.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+            {/* Create New Parameter Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Create New Parameter</CardTitle>
+                <CardDescription>
+                  Define a new evaluation parameter for this experiment
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-param-name">Parameter Name</Label>
+                  <Input
+                    id="new-param-name"
+                    value={newParameter.name}
+                    onChange={(e) => setNewParameter({ ...newParameter, name: e.target.value })}
+                    placeholder="e.g., Response Quality"
+                  />
+                </div>
                 
-                {/* Custom parameters (after the first 3) can be edited and removed */}
-                {parameters.slice(3).map((param, i) => {
-                  const actualIndex = i + 3;
-                  // Determine if this parameter is the one currently being edited (last one or explicitly expanded)
-                  const isCurrentlyEditing = param.isExpanded;
+                <div className="space-y-2">
+                  <Label htmlFor="new-param-description">Description</Label>
+                  <Textarea
+                    id="new-param-description"
+                    value={newParameter.description}
+                    onChange={(e) => setNewParameter({ ...newParameter, description: e.target.value })}
+                    placeholder="Describe what this parameter evaluates..."
+                    className="min-h-24"
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button
+                  type="button"
+                  onClick={addParameter}
+                  disabled={!newParameter.name.trim() || !newParameter.description.trim()}
+                  className="bg-primary hover:bg-orygin-red-hover text-white w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Parameter
+                </Button>
+              </CardFooter>
+            </Card>
 
-                  return (
-                    <div key={param.id} className={`orygin-card p-4 relative ${isCurrentlyEditing ? 'expanded-parameter' : 'collapsed-parameter'}`}>
-                      <div className="flex items-start space-x-3">
-                        <Checkbox
-                          id={param.id}
-                          checked={param.selected}
-                          onCheckedChange={() => toggleParameter(actualIndex)}
-                        />
-                        <div className="flex-1 space-y-1 cursor-pointer" onClick={() => toggleParameterExpansion(actualIndex)}>
-                          <div className="flex justify-between items-center">
-                            <Label
-                              htmlFor={param.id} // Keep this for accessibility, though click is on div
-                              className="font-medium"
-                            >
-                              {param.name || "New Parameter"}
-                            </Label>
-                            {/* Icon to indicate expandable/collapsible state */}
-                            {isCurrentlyEditing ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
-                          {isCurrentlyEditing && (
-                            <p className="text-sm text-muted-foreground">
-                              {param.description || "(No description)"}
-                            </p>
-                          )}
-                        </div>
-                        {isCurrentlyEditing && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive self-start"
-                            onClick={(e) => { e.stopPropagation(); removeParameter(actualIndex); }}
-                          >
-                            ×
-                          </Button>
-                        )}
+            {/* Select Parameters Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Available Parameters</CardTitle>
+                <CardDescription>
+                  {isLoadingParameters ? "Loading parameters..." : `Select from ${parameters.length} available parameter${parameters.length !== 1 ? 's' : ''}`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="max-h-80 overflow-y-auto space-y-4">
+                {isLoadingParameters ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-muted rounded w-1/2"></div>
                       </div>
-                      {isCurrentlyEditing && (
-                        <div className="mt-3 space-y-3 pl-7"> {/* Indent content when expanded */}
-                          <div>
-                            <Label htmlFor={`param-name-${actualIndex}`}>Parameter Name</Label>
-                            <Input
-                              id={`param-name-${actualIndex}`}
-                              value={param.name}
-                              onChange={(e) => updateParameter(actualIndex, "name", e.target.value)}
-                              placeholder="e.g., Response Quality"
-                              className="mt-1"
-                              onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to toggle expansion
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor={`param-desc-${actualIndex}`}>Description</Label>
-                            <Textarea
-                              id={`param-desc-${actualIndex}`}
-                              value={param.description}
-                              onChange={(e) => updateParameter(actualIndex, "description", e.target.value)}
-                              placeholder="Describe what this parameter evaluates..."
-                              className="mt-1"
-                              onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to toggle expansion
-                            />
-                          </div>
-                        </div>
-                      )}
+                    ))}
+                  </div>
+                ) : parameters.length > 0 ? (
+                  parameters.map((param, i) => (
+                    <div key={param.id} className="flex items-start space-x-3 p-3 border border-border rounded-md">
+                      <Checkbox
+                        id={param.id}
+                        checked={param.selected}
+                        onCheckedChange={() => toggleParameter(i)}
+                      />
+                      <div className="flex-1 space-y-1">
+                        <Label
+                          htmlFor={param.id}
+                          className="font-medium cursor-pointer"
+                        >
+                          {param.name}
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          {param.description}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeParameter(i)}
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span className="sr-only">Remove parameter</span>
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
-                <Button 
-                variant="outline" 
-                onClick={addParameter}
-                className="w-full border-dashed mt-4"
-              >
-                Add Another Parameter
-              </Button>
-            </CardContent>
-          </Card>
+                  ))
+                ) : (
+                  <div className="text-center py-8 border border-dashed border-border rounded-md">
+                    <p className="text-muted-foreground">
+                      No parameters available. Create your first parameter using the form on the left.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Selected Parameters Summary */}
+          {/* {parameters.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Selected Parameters</CardTitle>
+                <CardDescription>
+                  {parameters.filter(p => p.selected).length} parameter{parameters.filter(p => p.selected).length !== 1 ? 's' : ''} selected for evaluation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {parameters.filter(p => p.selected).length > 0 ? (
+                  <div className="space-y-2">
+                    {parameters.filter(p => p.selected).map((param) => (
+                      <div key={param.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                        <span className="font-medium">{param.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleParameter(parameters.findIndex(p => p.id === param.id))}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No parameters selected</p>
+                )}
+              </CardContent>
+            </Card>
+          )} */}
           
           {/* Estimated Price Section */}
           <Card className="mt-6">
@@ -557,17 +683,14 @@ const Home: React.FC = () => {
                     <p className="text-sm text-muted-foreground mt-2">
                       This estimate is based on the selected parameters and the number of conversations in your dataset.
                     </p>
-                  </div>
-                ) : (
+                  </div>                ) : (
                   <div className="flex justify-center">
                     <Button 
-                      onClick={() => {
-                        setEstimatedPrice(100);
-                        setPriceQuoted(true);
-                      }}
+                      onClick={calculateCost}
+                      disabled={isCalculatingCost || !datasetId || parameters.filter(p => p.selected).length === 0}
                       className="bg-primary hover:bg-orygin-red-hover text-white"
                     >
-                      Estimate your cost
+                      {isCalculatingCost ? "Calculating..." : "Estimate your cost"}
                     </Button>
                   </div>
                 )}
@@ -590,11 +713,34 @@ const Home: React.FC = () => {
             ? "bg-muted text-muted-foreground cursor-not-allowed" 
             : "bg-primary hover:bg-orygin-red-hover text-white"
           }
-          disabled={step === 2 && !priceQuoted}
-        >
+          disabled={step === 2 && !priceQuoted}        >
           {step === 2 ? "Create Experiment" : "Next"}
         </Button>
       </div>
+
+      {/* Delete Parameter Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the parameter
+              and remove it from your project.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setParameterToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParameter}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

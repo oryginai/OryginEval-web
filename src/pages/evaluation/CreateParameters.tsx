@@ -22,22 +22,63 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ApiClient } from "@/lib/api-client";
+import { v4 as uuidv4 } from 'uuid';
 
 const CreateParameters: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  
-  const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [existingParameters, setExistingParameters] = useState<Parameter[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [parameterToDelete, setParameterToDelete] = useState<{ id: string; name: string; type: 'existing' | 'new' } | null>(null);
   const [newParameter, setNewParameter] = useState({
     name: "",
     description: "",
   });
+  useEffect(() => {    const fetchExistingParameters = async () => {
+      try {
+        const response = await ApiClient.get(`/parameters-list?project_id=${projectId}`);
+        console.log("Existing Parameters API Response:", response);
+          if (response.data && (response.data as any).parameters) {
+          // Map the API response to match the Parameter interface
+          const mappedParameters = (response.data as any).parameters.map((param: any) => ({
+            id: param.parameter_id,
+            name: param.name,
+            description: param.description,
+            created_at: param.created_at,
+            project_id: projectId || ""
+          }));
+          setExistingParameters(mappedParameters);
+        } else if (response.error) {
+          console.error("API Error:", response.error);
+          // Fallback to mock data if API returns error
+          setExistingParameters(mockData.createMockParameters());
+        } else {
+          // Fallback to mock data if no data returned
+          setExistingParameters(mockData.createMockParameters());
+        }
+      } catch (error) {
+        console.error("Error fetching existing parameters:", error);
+        // Fallback to mock data on error
+        // setExistingParameters(mockData.createMockParameters());
+      }
+    };
 
-  useEffect(() => {
-    // In a real app, this would fetch existing parameters from the API
-    setExistingParameters(mockData.createMockParameters());
+    if (projectId) {
+      fetchExistingParameters();
+    }
   }, [projectId]);
 
   // Add a new parameter to the list
@@ -46,55 +87,81 @@ const CreateParameters: React.FC = () => {
       toast.error("Please fill in all fields");
       return;
     }
-    
-    const newId = `param_${Date.now()}`;
+
+    const parameterBody = {
+      parameter_name: newParameter.name,
+      parameter_description: newParameter.description,
+    };
+    const parameterId = uuidv4();
+    const response = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, parameterBody)
+    console.log("Add Parameter API Response:", response);
     setParameters([
       ...parameters,
       {
-        id: newId,
+        id: parameterId,
         name: newParameter.name,
         description: newParameter.description,
-        project_id: projectId || "",
         created_at: new Date().toISOString(),
-      },
-    ]);
+        project_id: projectId || "",
+      }]);
+
+    // const newId = `param_${Date.now()}`;
+    // setParameters([
+    //   ...parameters,
+    //   {
+    //     id: newId,
+    //     name: newParameter.name,
+    //     description: newParameter.description,
+    //     project_id: projectId || "",
+    //     created_at: new Date().toISOString(),
+    //   },
+    // ]);
     
-    setNewParameter({ name: "", description: "" });
+    setNewParameter({ name: "", description: "" });  };
+
+  // Handle delete parameter click - open confirmation dialog
+  const handleDeleteClick = (id: string, name: string, type: 'existing' | 'new') => {
+    setParameterToDelete({ id, name, type });
+    setDeleteConfirmOpen(true);
   };
 
-  // Remove a parameter from the list
-  const removeParameter = (id: string) => {
-    setParameters(parameters.filter((param) => param.id !== id));
-  };
+  // Delete parameter with API call (for existing parameters) or local removal (for new parameters)
+  const deleteParameter = async () => {
+    if (!parameterToDelete) return;
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (parameters.length === 0) {
-      toast.error("Please add at least one parameter");
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // In a real app, this would call the API to create the parameters
-      for (const param of parameters) {
-        await parameterApi.createParameter(
-          projectId || "",
-          param.name,
-          param.description
-        );
+    if (parameterToDelete.type === 'existing') {
+      // Delete existing parameter via API
+      try {
+        const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}`, {});
+        console.log("Delete Parameter API Response:", response);
+        
+        if (response.data || !response.error) {
+          // Remove parameter from local state
+          setExistingParameters(existingParameters.filter(param => param.id !== parameterToDelete.id));
+          toast.success("Parameter deleted successfully");
+        } else {
+          console.error("API Error:", response.error);
+          toast.error("Failed to delete parameter");
+        }
+      } catch (error) {
+        console.error("Error deleting parameter:", error);
+        toast.error("Failed to delete parameter");
       }
-      
-      toast.success("Parameters created successfully");
-      navigate(`/projects/${projectId}/evaluation`);
-    } catch (error) {
-      console.error("Error creating parameters:", error);
-      toast.success("Parameters created successfully");
-    } finally {
-      setIsLoading(false);
+    } else {
+      // Remove new parameter from local state only
+      setParameters(parameters.filter(param => param.id !== parameterToDelete.id));
+      toast.success("Parameter removed successfully");
+    }
+
+    setDeleteConfirmOpen(false);
+    setParameterToDelete(null);
+  };
+
+  // Remove a parameter from the list (legacy function - now using delete confirmation)
+  const removeParameter = (id: string) => {
+    const param = parameters.find(p => p.id === id);
+    if (param) {
+      handleDeleteClick(id, param.name, 'new');
     }
   };
 
@@ -107,7 +174,7 @@ const CreateParameters: React.FC = () => {
         </p>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="space-y-8">
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -153,33 +220,31 @@ const CreateParameters: React.FC = () => {
           
           <Card>
             <CardHeader>
-              <CardTitle>Existing Parameters</CardTitle>
+              <CardTitle>Parameters</CardTitle>
               <CardDescription>
-                Pre-defined parameters you can use
+                Parameters created for this project
               </CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-80 overflow-y-auto space-y-4">
+            </CardHeader>            <CardContent className="max-h-80 overflow-y-auto space-y-4">
               {existingParameters.map((param) => (
                 <div key={param.id} className="p-3 border border-border rounded-md">
                   <div className="flex items-start justify-between">
-                    <h4 className="font-medium">{param.name}</h4>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
-                            <Info className="h-3 w-3" />
-                            <span className="sr-only">Info</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          {param.description}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <div className="flex-1">
+                      <h4 className="font-medium">{param.name}</h4>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {param.description}
+                      </p>
+                    </div>                    <div className="flex items-center gap-1 ml-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteClick(param.id, param.name, 'existing')}
+                        className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span className="sr-only">Delete parameter</span>
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {param.description}
-                  </p>
                 </div>
               ))}
             </CardContent>
@@ -188,7 +253,7 @@ const CreateParameters: React.FC = () => {
         
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium">Your Parameters</h3>
+            <h3 className="text-lg font-medium">Added Parameters</h3>
             <span className="text-sm text-muted-foreground">
               {parameters.length} parameter{parameters.length !== 1 && "s"}
             </span>
@@ -222,26 +287,36 @@ const CreateParameters: React.FC = () => {
                 No parameters added yet. Add some parameters above.
               </p>
             </div>
-          )}
-        </div>
-        
-        <div className="flex justify-end space-x-4">
-          <Button 
-            variant="outline" 
-            onClick={() => navigate(`/projects/${projectId}/evaluation`)}
-            type="button"
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit"
-            className="bg-primary hover:bg-orygin-red-hover text-white"
-            disabled={isLoading || parameters.length === 0}
-          >
-            {isLoading ? "Saving..." : "Save Parameters"}
-          </Button>
-        </div>
-      </form>
+          )}        </div>
+      </div>
+
+      {/* Delete Parameter Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the parameter
+              "{parameterToDelete?.name}" 
+              {parameterToDelete?.type === 'existing' ? 
+                ' and remove it from your project.' : 
+                ' from your current session.'
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setParameterToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParameter}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
