@@ -27,43 +27,76 @@ import {
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, FileText, Database } from "lucide-react";
-import { Dataset, Parameter, mockData } from "@/services/api";
+import { Dataset, Parameter } from "@/services/api";
+import { ApiClient } from "@/lib/api-client";
 
 const CreateExperiment: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  
-  const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [experimentName, setExperimentName] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
   const [selectedParameterIds, setSelectedParameterIds] = useState<string[]>([]);
   
-  // In a real app, these would be fetched from the API
+  // Fetch datasets and parameters from API
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [parameters, setParameters] = useState<Parameter[]>([]);
 
   useEffect(() => {
-    // Simulate fetching datasets and parameters
-    const mockDatasets: Dataset[] = [
-      {
-        id: "dataset_1",
-        name: "GPT-4 Conversations",
-        project_id: projectId || "",
-        conversations: mockData.createMockConversations(10),
-        created_at: new Date().toISOString()
-      },
-      {
-        id: "dataset_2",
-        name: "Customer Service Samples",
-        project_id: projectId || "",
-        conversations: mockData.createMockConversations(8),
-        created_at: new Date(Date.now() - 86400000).toISOString()
+    const fetchData = async () => {
+      setIsLoadingData(true);
+      try {
+        // Fetch datasets
+        const datasetsResponse = await ApiClient.get('/datasets-list', { project_id: projectId });
+        console.log("Datasets API Response:", datasetsResponse);
+        
+        if (datasetsResponse.data && (datasetsResponse.data as any).datasets) {
+          // Transform API response to match frontend Dataset interface
+          const transformedDatasets: Dataset[] = (datasetsResponse.data as any).datasets.map((dataset: any) => ({
+            id: dataset.dataset_id,
+            name: dataset.name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`,
+            project_id: projectId || "",
+            created_at: dataset.created_at,
+            conversations: (dataset.dataset_json || []).map((conv: any) => ({
+              id: conv.id,
+              messages: (conv.conversation || []).map((msg: any) => ({
+                role: msg.role,
+                content: msg.content
+              }))
+            }))
+          }));
+          setDatasets(transformedDatasets);
+        }
+
+        // Fetch parameters
+        const parametersResponse = await ApiClient.get(`/parameters-list?project_id=${projectId}`);
+        console.log("Parameters API Response:", parametersResponse);
+        
+        if (parametersResponse.data && (parametersResponse.data as any).parameters) {
+          // Map the API response to Parameter interface
+          const mappedParameters: Parameter[] = (parametersResponse.data as any).parameters.map((param: any) => ({
+            id: param.parameter_id,
+            name: param.name,
+            description: param.description,
+            project_id: projectId || "",
+            created_at: param.created_at || new Date().toISOString()
+          }));
+          setParameters(mappedParameters);
+        }
+
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to fetch datasets and parameters");
+      } finally {
+        setIsLoadingData(false);
       }
-    ];
+    };
     
-    setDatasets(mockDatasets);
-    setParameters(mockData.createMockParameters(5));
+    if (projectId) {
+      fetchData();
+    }
   }, [projectId]);
 
   const startExperimentCreation = () => {
@@ -118,6 +151,32 @@ const CreateExperiment: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // If we're still loading data, show loading state
+  if (isLoadingData) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <p className="text-muted-foreground mt-1">
+            Set up a new evaluation experiment
+          </p>
+        </div>
+        
+        <div className="empty-state mt-12">
+          <div className="p-8">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Plus className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <h3 className="mt-4 text-lg font-semibold">Loading...</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Fetching datasets and parameters
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If not showing the form and we have datasets/parameters, show the empty state
   if (!showForm && datasets.length > 0 && parameters.length > 0) {
