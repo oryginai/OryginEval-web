@@ -6,7 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
-import { Plus, MoreVertical, Trash2, Database, Upload, FileText, Eye, ChevronDown, ChevronUp } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, MoreVertical, Trash2, Database, Upload, FileText, Eye, ChevronDown, ChevronUp, Edit3, Save, X } from "lucide-react";
 import { Dataset } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import {
@@ -16,17 +18,29 @@ import {
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogHeader,  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+// Types for conversations
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Conversation {
+  id: string;
+  messages: Message[];
+}
 
 const AllDatasets: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  const [isLoading, setIsLoading] = useState(true);  const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);  const [datasets, setDatasets] = useState<Dataset[]>([]);  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<{ id: string; name: string } | null>(null);
   const [viewingDataset, setViewingDataset] = useState<string | null>(null);
+  const [editingDataset, setEditingDataset] = useState<string | null>(null);
+  const [editedConversations, setEditedConversations] = useState<Conversation[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   // Fetch datasets
   useEffect(() => {
     const fetchDatasets = async () => {
@@ -84,10 +98,120 @@ const AllDatasets: React.FC = () => {
     setDatasetToDelete({ id, name });
     setDeleteConfirmOpen(true);
   };
-
   // Handle view dataset toggle
   const handleViewToggle = (datasetId: string) => {
     setViewingDataset(viewingDataset === datasetId ? null : datasetId);
+  };
+
+  // Handle edit dataset
+  const handleEditStart = (dataset: Dataset) => {
+    setEditingDataset(dataset.id);
+    setEditedConversations([...dataset.conversations]);
+    setViewingDataset(dataset.id); // Also show the details
+  };
+
+  // Handle cancel edit
+  const handleEditCancel = () => {
+    setEditingDataset(null);
+    setEditedConversations([]);
+  };
+
+  // Update a message in edited conversations
+  const updateEditedMessage = (conversationIndex: number, messageIndex: number, content: string) => {
+    const updatedConversations = [...editedConversations];
+    updatedConversations[conversationIndex].messages[messageIndex].content = content;
+    setEditedConversations(updatedConversations);
+  };
+
+  // Add a new message to an edited conversation
+  const addEditedMessage = (conversationIndex: number) => {
+    const updatedConversations = [...editedConversations];
+    const lastMessage = updatedConversations[conversationIndex].messages.slice(-1)[0];
+    const newRole = lastMessage.role === "user" ? "assistant" : "user";
+    updatedConversations[conversationIndex].messages.push({
+      role: newRole,
+      content: ""
+    });
+    setEditedConversations(updatedConversations);
+  };
+
+  // Remove a message from an edited conversation
+  const removeEditedMessage = (conversationIndex: number, messageIndex: number) => {
+    const updatedConversations = [...editedConversations];
+    // Ensure we always keep at least one message
+    if (updatedConversations[conversationIndex].messages.length > 1) {
+      updatedConversations[conversationIndex].messages.splice(messageIndex, 1);
+      setEditedConversations(updatedConversations);
+    }
+  };
+
+  // Remove an entire conversation
+  const removeEditedConversation = (conversationIndex: number) => {
+    const updatedConversations = editedConversations.filter((_, i) => i !== conversationIndex);
+    setEditedConversations(updatedConversations);
+  };
+
+  // Add a new conversation
+  const addEditedConversation = () => {
+    const newConversation: Conversation = {
+      id: `conv-${Date.now()}`,
+      messages: [
+        { role: "user", content: "" },
+        { role: "assistant", content: "" }
+      ]
+    };
+    setEditedConversations([...editedConversations, newConversation]);
+  };
+
+  // Save edited dataset
+  const saveEditedDataset = async () => {
+    if (!editingDataset) return;
+
+    // Validate that all messages have content
+    const isValid = editedConversations.every(conv => 
+      conv.messages.every(msg => msg.content.trim().length > 0)
+    );
+
+    if (!isValid) {
+      toast.error("Please fill in all conversation messages");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Prepare the dataset in the correct format for the API
+      const datasetData = {
+        dataset: editedConversations.map(conv => ({
+          id: conv.id,
+          conversation: conv.messages
+        }))
+      };
+
+      console.log("Updating dataset with edited conversations:", datasetData);
+      
+      const response = await ApiClient.post(`/datasets-update?dataset_id=${editingDataset}`, datasetData);
+      console.log("Dataset update response:", response);
+
+      if (response.data && (response.data as any).status === "success") {
+        // Update local state
+        setDatasets(datasets.map(dataset => 
+          dataset.id === editingDataset 
+            ? { ...dataset, conversations: editedConversations }
+            : dataset
+        ));
+        
+        toast.success("Dataset updated successfully!");
+        setEditingDataset(null);
+        setEditedConversations([]);
+      } else {
+        toast.error("Failed to update dataset. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error updating dataset:", error);
+      toast.error("Failed to update dataset. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Delete dataset with API call
@@ -208,11 +332,14 @@ const AllDatasets: React.FC = () => {
                                   <MoreVertical className="h-4 w-4" />
                                   <span className="sr-only">Open menu</span>
                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              </DropdownMenuTrigger>                              <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleViewToggle(dataset.id)}>
                                   <Eye className="mr-2 h-4 w-4" />
                                   {viewingDataset === dataset.id ? "Hide Details" : "View Details"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditStart(dataset)}>
+                                  <Edit3 className="mr-2 h-4 w-4" />
+                                  Edit Dataset
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}>
                                   <FileText className="mr-2 h-4 w-4" />
@@ -229,50 +356,166 @@ const AllDatasets: React.FC = () => {
                       </TableRow>
                       {viewingDataset === dataset.id && (
                         <TableRow>                          <TableCell colSpan={4} className="p-0">
-                            <div className="border-t p-6">
-                              <div className="space-y-4">
+                            <div className="border-t p-6">                              <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                   <h4 className="font-semibold text-lg">Dataset Conversations</h4>
-                                  <Badge variant="secondary">
-                                    {dataset.conversations.length} conversations
-                                  </Badge>
-                                </div>
-                                
-                                {dataset.conversations.length > 0 ? (
-                                  <div className="space-y-3 max-h-96 overflow-y-auto">                                    {dataset.conversations.map((conversation, idx) => (
-                                      <Card key={conversation.id || idx} className="border">
-                                        <CardHeader className="pb-3">
-                                          <CardTitle className="text-base font-semibold">
-                                            Conversation {idx + 1}
-                                          </CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="pt-4">
-                                          <div className="space-y-2">                                            {conversation.messages.map((message, msgIdx) => (
-                                              <div
-                                                key={msgIdx}
-                                                className={`p-3 rounded-lg border ${
-                                                  message.role === 'user'
-                                                    ? 'border-blue-500/50 bg-blue-500/10'
-                                                    : 'border-green-500/50 bg-green-500/10'
-                                                }`}
-                                              >
-                                                <div className="font-semibold text-sm mb-2 capitalize opacity-80">
-                                                  {message.role}:
-                                                </div>
-                                                <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                                                  {message.content}
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </CardContent>
-                                      </Card>
-                                    ))}
-                                  </div>                                ) : (
-                                  <div className="text-center py-12 text-muted-foreground">
-                                    <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                    <p className="text-base font-medium">No conversations in this dataset</p>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary">
+                                      {editingDataset === dataset.id ? editedConversations.length : dataset.conversations.length} conversations
+                                    </Badge>
+                                    {editingDataset === dataset.id ? (
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={handleEditCancel}
+                                          disabled={isSaving}
+                                        >
+                                          <X className="h-4 w-4 mr-1" />
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={saveEditedDataset}
+                                          disabled={isSaving}
+                                          className="bg-primary hover:bg-orygin-red-hover text-white"
+                                        >
+                                          <Save className="h-4 w-4 mr-1" />
+                                          {isSaving ? "Saving..." : "Save Changes"}
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleEditStart(dataset)}
+                                      >
+                                        <Edit3 className="h-4 w-4 mr-1" />
+                                        Edit
+                                      </Button>
+                                    )}
                                   </div>
+                                </div>                                
+                                {editingDataset === dataset.id ? (
+                                  // Edit Mode
+                                  <>
+                                    {editedConversations.length > 0 ? (
+                                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        {editedConversations.map((conversation, idx) => (
+                                          <Card key={conversation.id || idx} className="border relative">
+                                            <CardHeader className="pb-3">
+                                              <div className="flex items-center justify-between">
+                                                <CardTitle className="text-base font-semibold">
+                                                  Conversation {idx + 1}
+                                                </CardTitle>
+                                                {editedConversations.length > 1 && (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeEditedConversation(idx)}
+                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                  >
+                                                    <X className="h-4 w-4" />
+                                                  </Button>
+                                                )}
+                                              </div>
+                                            </CardHeader>
+                                            <CardContent className="pt-4">
+                                              <div className="space-y-3">
+                                                {conversation.messages.map((message, msgIdx) => (
+                                                  <div key={msgIdx} className="space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                      <Label className="text-xs capitalize">{message.role}</Label>
+                                                      {conversation.messages.length > 1 && (
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          onClick={() => removeEditedMessage(idx, msgIdx)}
+                                                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                        >
+                                                          <X className="h-3 w-3" />
+                                                        </Button>
+                                                      )}
+                                                    </div>
+                                                    <Textarea
+                                                      value={message.content}
+                                                      onChange={(e) => updateEditedMessage(idx, msgIdx, e.target.value)}
+                                                      placeholder={`${message.role === "user" ? "User message" : "Assistant response"}...`}
+                                                      className="min-h-16"
+                                                    />
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => addEditedMessage(idx)}
+                                                className="mt-3"
+                                              >
+                                                Add Message
+                                              </Button>
+                                            </CardContent>
+                                          </Card>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center py-12 text-muted-foreground">
+                                        <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                        <p className="text-base font-medium">No conversations in this dataset</p>
+                                      </div>
+                                    )}
+                                    
+                                    <Button
+                                      variant="outline"
+                                      onClick={addEditedConversation}
+                                      className="w-full border-dashed mt-4"
+                                    >
+                                      Add New Conversation
+                                    </Button>
+                                  </>
+                                ) : (
+                                  // View Mode
+                                  <>
+                                    {dataset.conversations.length > 0 ? (
+                                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        {dataset.conversations.map((conversation, idx) => (
+                                          <Card key={conversation.id || idx} className="border">
+                                            <CardHeader className="pb-3">
+                                              <CardTitle className="text-base font-semibold">
+                                                Conversation {idx + 1}
+                                              </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="pt-4">
+                                              <div className="space-y-2">
+                                                {conversation.messages.map((message, msgIdx) => (
+                                                  <div
+                                                    key={msgIdx}
+                                                    className={`p-3 rounded-lg border ${
+                                                      message.role === 'user'
+                                                        ? 'border-blue-500/50 bg-blue-500/10'
+                                                        : 'border-green-500/50 bg-green-500/10'
+                                                    }`}
+                                                  >
+                                                    <div className="font-semibold text-sm mb-2 capitalize opacity-80">
+                                                      {message.role}:
+                                                    </div>
+                                                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                                                      {message.content}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </CardContent>
+                                          </Card>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center py-12 text-muted-foreground">
+                                        <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                        <p className="text-base font-medium">No conversations in this dataset</p>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>

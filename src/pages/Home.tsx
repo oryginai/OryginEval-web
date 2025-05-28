@@ -452,6 +452,26 @@ const Home: React.FC = () => {
       
       // Create the experiment using the async API
       try {
+        // First, fetch the latest project details to get the labrat endpoint
+        const projectDetailsResponse = await ApiClient.get(`/projects-details?project_id=${projectId}`);
+        console.log("Project details response:", projectDetailsResponse);
+        
+        let labratJson = { endpoint: '', headers: {} };
+        
+        if (projectDetailsResponse.data && (projectDetailsResponse.data as any).project) {
+          const projectData = (projectDetailsResponse.data as any).project;
+          labratJson = {
+            endpoint: projectData.labrat_json?.endpoint || '',
+            headers: projectData.labrat_json?.headers || {}
+          };
+        } else {
+          console.warn("Could not fetch project details, using fallback labrat data");
+          labratJson = {
+            endpoint: currentProject?.labrat_json?.endpoint || '',
+            headers: currentProject?.labrat_json?.headers || {}
+          };
+        }
+        
         const experimentId = uuidv4();
         const selectedParameterIds = parameters
           .filter(param => param.selected)
@@ -461,12 +481,10 @@ const Home: React.FC = () => {
           experiment_name: `Quick Experiment ${new Date().toLocaleDateString()}`,
           dataset_id: datasetId,
           parameter_ids: selectedParameterIds,
-          labrat_json: { 
-            endpoint: currentProject?.labrat_json?.endpoint || '',
-            headers: currentProject?.labrat_json?.headers || {}
-          }
+          labrat_json: labratJson
         };
         
+        console.log("Labrat JSON from project details:", labratJson);
         console.log("Creating quick experiment with payload:", payload);
         
         const response = await ApiClient.post(

@@ -115,8 +115,7 @@ const CreateExperiment: React.FC = () => {
         return [...prev, parameterId];
       }
     });
-  };
-  // Handle form submission
+  };  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -139,19 +138,37 @@ const CreateExperiment: React.FC = () => {
     setIsLoading(true);
     
     try {
+      // First, fetch the latest project details to get the labrat endpoint
+      const projectDetailsResponse = await ApiClient.get(`/projects-details?project_id=${projectId}`);
+      console.log("Project details response:", projectDetailsResponse);
+      
+      let labratJson = { endpoint: '', headers: {} };
+      
+      if (projectDetailsResponse.data && (projectDetailsResponse.data as any).project) {
+        const projectData = (projectDetailsResponse.data as any).project;
+        labratJson = {
+          endpoint: projectData.labrat_json?.endpoint || '',
+          headers: projectData.labrat_json?.headers || {}
+        };
+      } else {
+        console.warn("Could not fetch project details, using fallback labrat data");
+        labratJson = {
+          endpoint: currentProject?.labrat_json?.endpoint || '',
+          headers: currentProject?.labrat_json?.headers || {}
+        };
+      }
+      
       // Generate a unique experiment ID
       const experimentId = uuidv4();
-        // Prepare the request payload
+      // Prepare the request payload
       const payload = {
         experiment_name: experimentName,
         dataset_id: selectedDatasetId,
         parameter_ids: selectedParameterIds,
-        labrat_json: { 
-          endpoint: currentProject?.labrat_json?.endpoint || '',
-          headers: currentProject?.labrat_json?.headers || {}
-        }
+        labrat_json: labratJson
       };
       
+      console.log("Labrat JSON from project details:", labratJson);
       console.log("Creating experiment with payload:", payload);
       
       // Call the async experiment creation API
