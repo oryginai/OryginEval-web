@@ -59,8 +59,8 @@ export const Sidebar: React.FC = () => {
         icon: BarChart3,
         path: `/projects/${projectId}/evaluation`,
         subSections: [
-          { title: "Create Experiment", path: `/projects/${projectId}/evaluation/create-experiment` },
-          { title: "Create Parameters", path: `/projects/${projectId}/evaluation/create-parameters` },
+          { title: "Experiments", path: `/projects/${projectId}/evaluation/create-experiment` },
+          { title: "Parameters", path: `/projects/${projectId}/evaluation/create-parameters` },
           { title: "History", path: `/projects/${projectId}/evaluation/history` },
         ],
       });      

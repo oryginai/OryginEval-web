@@ -183,7 +183,7 @@ const CreateExperiment: React.FC = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <h2 className="text-2xl font-bold">Experiments</h2>
           <p className="text-muted-foreground mt-1">
             Set up a new evaluation experiment
           </p>
@@ -209,7 +209,7 @@ const CreateExperiment: React.FC = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-2xl font-bold">Create Experiment</h2>
+          <h2 className="text-2xl font-bold">Experiments</h2>
           <p className="text-muted-foreground mt-1">
             Set up a new evaluation experiment
           </p>

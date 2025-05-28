@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
-import { Plus, MoreVertical, Trash2, Database, Upload, FileText } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Database, Upload, FileText, Eye, ChevronDown, ChevronUp } from "lucide-react";
 import { Dataset } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import {
@@ -23,10 +23,10 @@ import {
 const AllDatasets: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [viewingDataset, setViewingDataset] = useState<string | null>(null);
   // Fetch datasets
   useEffect(() => {
     const fetchDatasets = async () => {
@@ -79,11 +79,15 @@ const AllDatasets: React.FC = () => {
       day: "numeric"
     });
   };
-  
-  // Handle delete dataset click - open confirmation dialog
+    // Handle delete dataset click - open confirmation dialog
   const handleDeleteClick = (id: string, name: string) => {
     setDatasetToDelete({ id, name });
     setDeleteConfirmOpen(true);
+  };
+
+  // Handle view dataset toggle
+  const handleViewToggle = (datasetId: string) => {
+    setViewingDataset(viewingDataset === datasetId ? null : datasetId);
   };
 
   // Delete dataset with API call
@@ -165,42 +169,117 @@ const AllDatasets: React.FC = () => {
                     <TableHead>Conversations</TableHead>
                     <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </TableHeader>                <TableBody>
                   {datasets.map((dataset) => (
-                    <TableRow key={dataset.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <Database className="h-4 w-4 text-muted-foreground" />
-                          {dataset.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(dataset.created_at)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono">
-                          {dataset.conversations.length}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
+                    <React.Fragment key={dataset.id}>
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <Database className="h-4 w-4 text-muted-foreground" />
+                            {dataset.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatDate(dataset.created_at)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono">
+                            {dataset.conversations.length}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleViewToggle(dataset.id)}
+                            >
+                              {viewingDataset === dataset.id ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                              <span className="sr-only">
+                                {viewingDataset === dataset.id ? "Hide details" : "View details"}
+                              </span>
                             </Button>
-                          </DropdownMenuTrigger>                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}>
-                              <FileText className="mr-2 h-4 w-4" />
-                              Use in Experiment
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteClick(dataset.id, dataset.name)}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleViewToggle(dataset.id)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  {viewingDataset === dataset.id ? "Hide Details" : "View Details"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Use in Experiment
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteClick(dataset.id, dataset.name)}>
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {viewingDataset === dataset.id && (
+                        <TableRow>                          <TableCell colSpan={4} className="p-0">
+                            <div className="border-t p-6">
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-lg">Dataset Conversations</h4>
+                                  <Badge variant="secondary">
+                                    {dataset.conversations.length} conversations
+                                  </Badge>
+                                </div>
+                                
+                                {dataset.conversations.length > 0 ? (
+                                  <div className="space-y-3 max-h-96 overflow-y-auto">                                    {dataset.conversations.map((conversation, idx) => (
+                                      <Card key={conversation.id || idx} className="border">
+                                        <CardHeader className="pb-3">
+                                          <CardTitle className="text-base font-semibold">
+                                            Conversation {idx + 1}
+                                          </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                          <div className="space-y-2">                                            {conversation.messages.map((message, msgIdx) => (
+                                              <div
+                                                key={msgIdx}
+                                                className={`p-3 rounded-lg border ${
+                                                  message.role === 'user'
+                                                    ? 'border-blue-500/50 bg-blue-500/10'
+                                                    : 'border-green-500/50 bg-green-500/10'
+                                                }`}
+                                              >
+                                                <div className="font-semibold text-sm mb-2 capitalize opacity-80">
+                                                  {message.role}:
+                                                </div>
+                                                <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                                                  {message.content}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    ))}
+                                  </div>                                ) : (
+                                  <div className="text-center py-12 text-muted-foreground">
+                                    <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                    <p className="text-base font-medium">No conversations in this dataset</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>

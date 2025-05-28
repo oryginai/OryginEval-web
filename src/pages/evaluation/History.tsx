@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -23,6 +22,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, MoreVertical, ExternalLink, Trash2, Check, Clock, AlertTriangle, AlertCircle, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
@@ -42,7 +51,9 @@ const ExperimentHistory: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
     const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [experiments, setExperiments] = useState<ExperimentData[]>([]);  useEffect(() => {
+  const [experiments, setExperiments] = useState<ExperimentData[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [experimentToDelete, setExperimentToDelete] = useState<{ id: string; name: string } | null>(null);useEffect(() => {
     fetchExperiments();
   }, [projectId]);
 
@@ -161,7 +172,6 @@ const ExperimentHistory: React.FC = () => {
         return status;
     }
   };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
@@ -174,6 +184,37 @@ const ExperimentHistory: React.FC = () => {
         return "bg-destructive/10 text-destructive border-destructive/20";
       default:
         return "";
+    }
+  };
+
+  // Handle delete experiment click - open confirmation dialog
+  const handleDeleteClick = (id: string, name: string) => {
+    setExperimentToDelete({ id, name });
+    setDeleteConfirmOpen(true);
+  };
+
+  // Delete experiment with API call
+  const deleteExperiment = async () => {
+    if (!experimentToDelete) return;
+
+    try {
+      const response = await ApiClient.post(`/experiments-delete?project_id=${projectId}&experiment_id=${experimentToDelete.id}`, {});
+      console.log("Delete Experiment API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Remove experiment from local state
+        setExperiments(experiments.filter(experiment => experiment.experiment_id !== experimentToDelete.id));
+        toast.success("Experiment deleted successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to delete experiment");
+      }
+    } catch (error) {
+      console.error("Error deleting experiment:", error);
+      toast.error("Failed to delete experiment");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setExperimentToDelete(null);
     }
   };
 
@@ -278,6 +319,7 @@ const ExperimentHistory: React.FC = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteClick(experiment.experiment_id, experiment.name)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
@@ -317,10 +359,33 @@ const ExperimentHistory: React.FC = () => {
             >
               <Plus className="h-4 w-4" />
               Create New Experiment
-            </Button>
-          </div>
+            </Button>          </div>
         </div>
       )}
+
+      {/* Delete Experiment Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the experiment
+              "{experimentToDelete?.name}" and remove all its results from your project.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setExperimentToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteExperiment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

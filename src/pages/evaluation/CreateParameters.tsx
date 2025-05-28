@@ -168,7 +168,7 @@ const CreateParameters: React.FC = () => {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">Create Parameters</h2>
+        <h2 className="text-2xl font-bold">Parameters</h2>
         <p className="text-muted-foreground mt-1">
           Define evaluation criteria for your experiments
         </p>
