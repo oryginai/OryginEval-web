@@ -39,6 +39,7 @@ const Projects: React.FC = () => {
     deleteProject,
     isLoading: contextIsLoading,
   } = useProject();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [newProject, setNewProject] = useState({
     name: '',
     test_endpoint: '',
@@ -47,8 +48,14 @@ const Projects: React.FC = () => {
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    console.log('Projects.tsx useEffect - Auth state:', { isAuthenticated, user: user?.id, authLoading });
+    
+    // Only fetch projects if user is authenticated and not loading
+    if (isAuthenticated && user?.id && !authLoading) {
+      console.log('Calling fetchProjects for user:', user.id);
+      fetchProjects();
+    }
+  }, [fetchProjects, isAuthenticated, user?.id, authLoading]);
 
   const handleCreateProject = async () => {
     const projectName = newProject.name.trim();

@@ -8,13 +8,21 @@ import React, {
 import { ApiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
+import { v4 as uuidv4 } from 'uuid';
 
 export type Project = {
   id: string;
   name: string;
-  api_key: string;
-  test_endpoint: string;
+  // api_key: string;
+  // test_endpoint: string;
   created_at: string;
+  dataset_ids?: string[];
+  parameter_ids?: string[];
+  experiment_ids?: string[];
+  labrat_json?: {
+    endpoint: string;
+    headers: Record<string, string>;
+  };
 };
 
 type ProjectContextType = {
@@ -41,11 +49,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await ApiClient.get<Project[]>('/projects-list', {
+      const res = await ApiClient.get<any>('/projects-list', {
         account_id: user?.id || '',
       });
+      console.log('API Response:', res);
+      console.log("Data:", res.data);
+      console.log('ok', res.data.projects);
       if (res.data) {
-        setProjects(res.data);
+        const transformedProjects = res.data.projects.map((project: any) => ({
+          id: project.project_id,
+          name: project.project_name || 'Untitled Project',
+          created_at: project.created_at,
+          dataset_ids: project.dataset_ids || [],
+          parameter_ids: project.parameter_ids || [],
+          experiment_ids: project.experiment_ids || [],
+          labrat_json: project.labrat_json || { endpoint: '', headers: {} },
+        }));
+        setProjects(transformedProjects);
       } else {
         toast.error(res.error?.message || 'Failed to fetch projects');
         setProjects([]);
@@ -77,19 +97,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   };
   const createProject = async (
-    data: Partial<Omit<Project, 'id' | 'created_at'>>,
-  ) => {
+    data: Partial<Omit<Project, 'id' | 'created_at'>>,  ) => {
     setIsLoading(true);
     try {
       const projectDataWithApiKey = {
-        ...data,
-        api_key:
-          data.api_key ||
-          `sk-local-${Math.random().toString(36).substring(2, 10)}`, // Ensure a local API key
+        'project_name': data.name || '',
+        'labrat': {'endpoint': data.labrat_json?.endpoint || ''}
       };
 
       const res = await ApiClient.post<Project>(
-        `/projects-create?project_id=string&account_id=${user?.id || ''}`,
+        `/projects-create?project_id=${uuidv4()}&account_id=${user?.id || ''}`,
         projectDataWithApiKey,
       );
       if (res.data) {
