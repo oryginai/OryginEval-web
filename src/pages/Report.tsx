@@ -55,6 +55,7 @@ interface EvaluationDetail {
 interface EvalResult {
   convoid: string;
   response_time: number;
+  conversation?: string; // Add conversation messages
   evaluations: EvaluationDetail[];
 }
 
@@ -184,10 +185,10 @@ const Report: React.FC = () => {
           comment: evaluation.comment || ""
         };
       });
-      
-      return {
+        return {
         convoid: conv.convoid || conv.conversationId || "Unknown",
         response_time: conv.response_time || 0,
+        conversation: conv.conversation || "", // Include conversation messages
         evaluations
       };
     });
@@ -454,8 +455,7 @@ const Report: React.FC = () => {
     });
 
     // Create the new JSON structure according to requirements
-    const jsonReport = {
-      metadata: {
+    const jsonReport = {      metadata: {
         experiment_name: experimentName,
         project_name: projectName,
         export_date: new Date().toISOString(),
