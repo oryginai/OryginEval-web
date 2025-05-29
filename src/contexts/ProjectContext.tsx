@@ -114,21 +114,41 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setProjects(prev => [...prev, res.data]);
 
         // Create the default parameters for the new project
-        const parameterBody1 = {parameter_name: "Hallucination",parameter_description: "Measures how much the output contains false or made-up information.",};
-        const parameterId1 = uuidv4();
-        const response1 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId1}`, parameterBody1)
-        console.log("Add Parameter API Response:", response1);
-        const parameterBody2 = {parameter_name: "Relevance",parameter_description: "Assesses how well the response aligns with the prompt or topic.",};
-        const parameterId2 = uuidv4();
-        const response2 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId2}`, parameterBody2)
-        console.log("Add Parameter API Response:", response2);
-        const parameterBody3 = {parameter_name: "Toxicity",parameter_description: "Indicates the presence of harmful or inappropriate language.",};
-        const parameterId3 = uuidv4();
-        const response3 = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId3}`, parameterBody3)
-        console.log("Add Parameter API Response:", response3);
+        const defaultParameters = [
+          {
+            parameter_name: "Hallucination",
+            parameter_description: "Measures how much the output contains false or made-up information.",
+          },
+          {
+            parameter_name: "Relevance", 
+            parameter_description: "Assesses how well the response aligns with the prompt or topic.",
+          },
+          {
+            parameter_name: "Toxicity",
+            parameter_description: "Indicates the presence of harmful or inappropriate language.",
+          }
+        ];
 
+        // Create parameters sequentially with proper error handling
+        for (const parameterBody of defaultParameters) {
+          try {
+            const parameterId = uuidv4();
+            const response = await ApiClient.post(
+              `/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, 
+              parameterBody
+            );
+            
+            if (response.data) {
+              console.log(`Successfully created parameter: ${parameterBody.parameter_name}`, response.data);
+            } else {
+              console.error(`Failed to create parameter: ${parameterBody.parameter_name}`, response.error);
+            }
+          } catch (error) {
+            console.error(`Error creating parameter: ${parameterBody.parameter_name}`, error);
+          }
+        }
 
-      } else {
+      }else {
         toast.error(res.error?.message || 'Failed to create project');
       }
       return res.data;

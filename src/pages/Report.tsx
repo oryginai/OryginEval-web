@@ -25,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { Plus, Timer, AlertTriangle, Smile, ListChecks, Lightbulb, Target, ShieldAlert, TrendingUp, BarChartHorizontalBig, Info, LineChart as LineChartLucide, Radar as RadarLucide } from "lucide-react"; // Aliased LineChart and Radar
+import { Plus, Timer, AlertTriangle, Smile, ListChecks, Lightbulb, Target, ShieldAlert, TrendingUp, BarChartHorizontalBig, Info, LineChart as LineChartLucide, Radar as RadarLucide, Download } from "lucide-react"; // Aliased LineChart and Radar
 import {
   BarChart,
   Bar,
@@ -79,7 +79,8 @@ const Report: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-
+  const [projectName, setProjectName] = useState<string>("");
+  const [experimentName, setExperimentName] = useState<string>("");
   useEffect(() => {
     const fetchExperimentDetails = async () => {
       if (!experimentId) {
@@ -91,13 +92,32 @@ const Report: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-          const response = await ApiClient.get(`/experiments-details?experiment_id=${experimentId}`);        console.log("Experiment details API Response:", response);
+        
+        // Fetch experiment details
+        const response = await ApiClient.get(`/experiments-details?experiment_id=${experimentId}`);
+        console.log("Experiment details API Response:", response);
         console.log("Response data:", response.data);
         console.log("Experiment object:", (response.data as any)?.experiment);
         console.log("Result check:", (response.data as any)?.experiment?.result);
         
         if (response.data && (response.data as any).experiment && (response.data as any).experiment.result && Array.isArray((response.data as any).experiment.result)) {
           const apiData = (response.data as any).experiment;
+          
+          // Set experiment name from API response
+          setExperimentName(apiData.experiment_name || apiData.name || `Experiment ${experimentId}`);
+          
+          // Fetch project name if project_id is available
+          if (apiData.project_id || projectId) {
+            try {
+              const projectResponse = await ApiClient.get(`/projects-details?project_id=${apiData.project_id || projectId}`);
+              if (projectResponse.data && (projectResponse.data as any).project) {
+                setProjectName((projectResponse.data as any).project.project_name || (projectResponse.data as any).project.name || `Project ${apiData.project_id || projectId}`);
+              }
+            } catch (projectError) {
+              console.warn("Failed to fetch project details:", projectError);
+              setProjectName(`Project ${apiData.project_id || projectId}`);
+            }
+          }
           
           // Transform API response to ReportData interface
           const transformedData: ReportData = transformApiResponseToReportData(apiData);
@@ -121,7 +141,7 @@ const Report: React.FC = () => {
     };
 
     fetchExperimentDetails();
-  }, [experimentId]);
+  }, [experimentId, projectId]);
 
   // Helper function to transform API response to ReportData interface
   const transformApiResponseToReportData = (apiData: any): ReportData => {
@@ -248,7 +268,6 @@ const Report: React.FC = () => {
     
     return insights.length > 0 ? insights : ["Analysis complete. Review individual metrics for detailed performance insights."];
   };
-
   // Helper function to get parameter score cards
   const getParameterScoreCards = (reportData: ReportData) => {
     const parameters: Array<{
@@ -258,11 +277,14 @@ const Report: React.FC = () => {
       grade: string;
       gradeColor: string;
       IconComponent: any;
-    }> = [];    // Get unique parameter names from eval results
+    }> = [];    // Get unique parameter names from eval results (excluding Semantic Similarity)
     const uniqueParams = new Set<string>();
     reportData.eval_results.forEach(result => {
       result.evaluations.forEach(evaluation => {
-        uniqueParams.add(evaluation.name);
+        // Exclude Semantic Similarity from parameter cards
+        if (evaluation.name !== "Semantic Similarity") {
+          uniqueParams.add(evaluation.name);
+        }
       });
     });
 
@@ -332,7 +354,6 @@ const Report: React.FC = () => {
         return "Parameter score (0-1 scale)";
     }
   };
-
   // Helper function to get letter grade and color
   const getGrade = (score: number): { grade: string; color: string } => {
     if (score >= 0.9) return { grade: "A", color: "text-green-500" };
@@ -341,10 +362,136 @@ const Report: React.FC = () => {
     if (score >= 0.6) return { grade: "D", color: "text-orange-500" };
     return { grade: "F", color: "text-red-500" };
   };
-    // Prepare chart data - dynamically based on actual parameters from API response
+
+  // Helper function to get parameters for table display
+  const getParametersForTable = (reportData: ReportData) => {
+    if (!reportData || reportData.eval_results.length === 0) return [];
+
+    // Get all unique parameter names from evaluations
+    const allParams = new Set<string>();
+    reportData.eval_results.forEach(result => {
+      result.evaluations.forEach(evaluation => {
+        allParams.add(evaluation.name);
+      });
+    });
+
+    const paramArray = Array.from(allParams);
+    
+    // Define parameter priority order (most important first)
+    const priorityOrder = [
+      "Semantic Similarity",
+      "Hallucination", 
+      "Accuracy",
+      "Accuracy Score",
+      "Toxicity",
+      "Toxicity Score"
+    ];
+
+    // Sort parameters by priority, then alphabetically
+    const sortedParams = paramArray.sort((a, b) => {
+      const aIndex = priorityOrder.indexOf(a);
+      const bIndex = priorityOrder.indexOf(b);
+      
+      if (aIndex !== -1 && bIndex !== -1) {
+        return aIndex - bIndex;
+      } else if (aIndex !== -1) {
+        return -1;
+      } else if (bIndex !== -1) {
+        return 1;
+      } else {
+        return a.localeCompare(b);
+      }
+    });
+
+    // Limit parameters based on screen space
+    // For mobile: max 2 parameters
+    // For tablet: max 3 parameters  
+    // For desktop: max 4 parameters
+    const maxParams = window.innerWidth < 768 ? 2 : window.innerWidth < 1024 ? 3 : 4;
+    
+    return sortedParams.slice(0, Math.min(maxParams, sortedParams.length));
+  };
+  // Helper function to get abbreviated parameter name for table headers
+  const getAbbreviatedParamName = (paramName: string): string => {
+    const abbreviations: { [key: string]: string } = {
+      "Semantic Similarity": "Sem. Similarity",
+      "Hallucination": "Hallucination",
+      "Accuracy Score": "Accuracy",
+      "Accuracy": "Accuracy",
+      "Toxicity Score": "Toxicity",
+      "Toxicity": "Toxicity"
+    };
+    
+    return abbreviations[paramName] || (paramName.length > 12 ? paramName.substring(0, 10) + "..." : paramName);
+  };
+  // Function to download JSON report with new structure
+  const downloadJsonReport = () => {
+    if (!reportData) return;
+
+    // Get all unique parameter names and their average scores
+    const uniqueParams = new Set<string>();
+    reportData.eval_results.forEach(result => {
+      result.evaluations.forEach(evaluation => {
+        uniqueParams.add(evaluation.name);
+      });
+    });
+
+    // Calculate average scores for all parameters dynamically
+    const parameterScores: { [key: string]: number } = {};
+    uniqueParams.forEach(paramName => {
+      const scores = reportData.eval_results
+        .flatMap(result => result.evaluations)
+        .filter(evaluation => evaluation.name === paramName)
+        .map(evaluation => evaluation.score);
+      
+      const avgScore = scores.length > 0 
+        ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+        : 0;
+      
+      // Convert parameter name to snake_case for consistency
+      const paramKey = paramName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      parameterScores[paramKey] = avgScore;
+    });
+
+    // Create the new JSON structure according to requirements
+    const jsonReport = {
+      metadata: {
+        experiment_name: experimentName,
+        project_name: projectName,
+        export_date: new Date().toISOString(),
+        // report_version: "2.0"
+      },
+      report_data: {
+        // Overall metrics first
+        conversations_tested: reportData.overall_eval_results.conversations_tested,
+        avg_response_time: reportData.overall_eval_results.average_response_time,
+        semantic_similarity: reportData.overall_eval_results["Semantic Similarity"],
+        
+        // Dynamic parameter scores for all parameters
+        parameter_scores: parameterScores,
+        
+        // Then insights
+        insights: reportData.insights,
+        
+        // Finally simulation data (renamed from eval_results)
+        simulation_data: reportData.eval_results
+      }
+    };
+
+    // Create and download the file
+    const blob = new Blob([JSON.stringify(jsonReport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `evaluation-report-${experimentId}-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };// Prepare chart data - dynamically based on actual parameters from API response
   const overallMetricsForChart = reportData
     ? (() => {
-        // Get unique parameter names from eval results
+        // Get unique parameter names from eval results (including Semantic Similarity for radar chart)
         const uniqueParams = new Set<string>();
         reportData.eval_results.forEach(result => {
           result.evaluations.forEach(evaluation => {
@@ -378,11 +525,9 @@ const Report: React.FC = () => {
         });
       })()
     : [];
-
   const conversationScoresForChart = reportData
     ? reportData.eval_results.map((conv) => ({
         name: conv.convoid.replace("convoid", "C"), // Shorten name
-        Hallucination: conv.evaluations.find((e) => e.name === "Hallucination")?.score || 0,
         "Semantic Similarity": conv.evaluations.find((e) => e.name === "Semantic Similarity")?.score || 0,
       }))
     : [];
@@ -393,14 +538,10 @@ const Report: React.FC = () => {
         "Response Time (s)": conv.response_time,
       }))
     : [];
-
   const overallMetricsCardsData = reportData ? [
     { title: "Conversations Tested", value: reportData.overall_eval_results.conversations_tested.toString(), IconComponent: ListChecks, note: "Total interactions evaluated" },
     { title: "Avg. Response Time", value: `${reportData.overall_eval_results.average_response_time.toFixed(2)}s`, IconComponent: Timer, note: "Average bot response speed" },
-    { title: "Hallucination Score", value: reportData.overall_eval_results.Hallucination.toFixed(2), IconComponent: AlertTriangle, note: "Lower is better (0-1 scale)" },
     { title: "Semantic Similarity", value: reportData.overall_eval_results["Semantic Similarity"].toFixed(2), IconComponent: Smile, note: "Higher is better (0-1 scale)" },
-    { title: "Accuracy Score", value: (reportData.overall_eval_results["Accuracy Score"] || 0).toFixed(2), IconComponent: Target, note: "Overall correctness (0-1 scale)" },
-    { title: "Toxicity Score", value: (reportData.overall_eval_results["Toxicity Score"] || 0).toFixed(2), IconComponent: ShieldAlert, note: "Lower is better (0-1 scale)" },
   ] : [];
 
 
@@ -465,20 +606,31 @@ const Report: React.FC = () => {
 
   return (
     <TooltipProvider>
-      <div className="space-y-8 p-4 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="space-y-8 p-4 md:p-8">        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Evaluation Report</h1>
             <p className="text-muted-foreground">
               Detailed analysis of the latest evaluation run.
             </p>
-          </div>          <Button
-            onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
-            className="gap-2 bg-primary hover:bg-orygin-red-hover text-primary-foreground"
-          >
-            <Plus className="h-4 w-4" />
-            New Experiment
-          </Button>        </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={downloadJsonReport}
+              variant="outline"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download Report
+            </Button>
+            <Button
+              onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}
+              className="gap-2 bg-primary hover:bg-orygin-red-hover text-primary-foreground"
+            >
+              <Plus className="h-4 w-4" />
+              New Experiment
+            </Button>
+          </div>
+        </div>
 
         {/* Parameter Score Cards */}
         <div className="space-y-4">
@@ -507,10 +659,8 @@ const Report: React.FC = () => {
               </Card>
             ))}
           </div>
-        </div>
-
-        {/* Overall Metrics Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        </div>        {/* Overall Metrics Cards */}
+        <div className="grid gap-4 md:grid-cols-3">
           {overallMetricsCardsData.map((metric, index) => (
             <Card key={index} className="shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -554,33 +704,35 @@ const Report: React.FC = () => {
                 </ul>
               </CardContent>
             </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <RadarLucide className="h-6 w-6 text-primary" />
-                    Overall Metric Scores
-                </CardTitle>
-                <CardDescription>Visual representation of overall performance metrics.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[350px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={overallMetricsForChart}>
-                      <PolarGrid stroke="hsl(var(--border))" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 1]} tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                      <Radar name="Score" dataKey="score" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.6} />
-                      <RechartsTooltip
-                        contentStyle={{ backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "var(--radius)", color: "hsl(var(--popover-foreground))" }}
-                        formatter={(value: number, name: string) => [`${(value * 100).toFixed(0)}%`, name]}
-                        labelFormatter={(label: string) => <span style={{ fontWeight: 'bold' }}>{label}</span>}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+              {/* Only show radar chart if there are 3 or more parameters */}
+            {overallMetricsForChart.length >= 3 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                      <RadarLucide className="h-6 w-6 text-primary" />
+                      Overall Metric Scores
+                  </CardTitle>
+                  <CardDescription>Visual representation of overall performance metrics.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={overallMetricsForChart}>
+                        <PolarGrid stroke="hsl(var(--border))" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 1]} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                        <Radar name="Score" dataKey="score" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.6} />
+                        <RechartsTooltip
+                          contentStyle={{ backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "var(--radius)", color: "hsl(var(--popover-foreground))" }}
+                          formatter={(value: number, name: string) => [`${(value * 100).toFixed(0)}%`, name]}
+                          labelFormatter={(label: string) => <span style={{ fontWeight: 'bold' }}>{label}</span>}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Visualizations Tab */}
@@ -611,15 +763,13 @@ const Report: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
-              </Card>
-
-              <Card>
+              </Card>              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChartHorizontalBig className="h-6 w-6 text-primary" />
                     Scores per Conversation
                   </CardTitle>
-                  <CardDescription>Hallucination and Semantic Similarity scores across conversations.</CardDescription>
+                  <CardDescription>Semantic Similarity scores across conversations.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
@@ -633,7 +783,6 @@ const Report: React.FC = () => {
                           formatter={(value: number, name: string) => [`${(value * 100).toFixed(0)}%`, name]}
                         />
                         <Legend wrapperStyle={{ fontSize: "12px" }} />
-                        <Bar dataKey="Hallucination" fill="hsl(var(--primary) / 0.6)" name="Hallucination" />
                         <Bar dataKey="Semantic Similarity" fill="hsl(var(--primary))" name="Semantic Similarity" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -641,15 +790,13 @@ const Report: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          {/* Conversation Details Tab */}
+          </TabsContent>          {/* Conversation Details Tab */}
           <TabsContent value="conversations">
             <Card>
               <CardHeader>
                 <CardTitle>Conversation Breakdown</CardTitle>
                 <CardDescription>
-                  Detailed scores and comments for each conversation.
+                  Detailed scores and comments for each conversation. Showing top parameters for screen optimization.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -659,34 +806,37 @@ const Report: React.FC = () => {
                       <TableRow>
                         <TableHead className="w-[100px]">Convo ID</TableHead>
                         <TableHead className="text-center">Resp. Time (s)</TableHead>
-                        <TableHead className="text-center">Hallucination</TableHead>
-                        <TableHead className="text-center">Sem. Similarity</TableHead>
+                        {getParametersForTable(reportData).map((paramName) => (
+                          <TableHead key={paramName} className="text-center min-w-[120px]">
+                            {getAbbreviatedParamName(paramName)}
+                          </TableHead>
+                        ))}
                         <TableHead className="text-right w-[100px]">Details</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {reportData.eval_results.map((conv) => {
-                        const hallucinationEval = conv.evaluations.find(e => e.name === "Hallucination");
-                        const semanticSimilarityEval = conv.evaluations.find(e => e.name === "Semantic Similarity");
-                        const hallucinationGrade = hallucinationEval ? getGrade(hallucinationEval.score) : { grade: 'N/A', color: 'text-muted-foreground' };
-                        const semanticSimilarityGrade = semanticSimilarityEval ? getGrade(semanticSimilarityEval.score) : { grade: 'N/A', color: 'text-muted-foreground' };
-
+                        const tableParams = getParametersForTable(reportData);
+                        
                         return (
                           <TableRow key={conv.convoid}>
                             <TableCell className="font-medium">{conv.convoid}</TableCell>
                             <TableCell className="text-center">{conv.response_time.toFixed(2)}</TableCell>
-                            <TableCell className="text-center">
-                              <span className={`font-semibold ${hallucinationGrade.color}`}>
-                                {hallucinationEval ? hallucinationEval.score.toFixed(2) : 'N/A'}
-                              </span>
-                              <span className="text-xs text-muted-foreground ml-1">({hallucinationGrade.grade})</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={`font-semibold ${semanticSimilarityGrade.color}`}>
-                                {semanticSimilarityEval ? semanticSimilarityEval.score.toFixed(2) : 'N/A'}
-                              </span>
-                              <span className="text-xs text-muted-foreground ml-1">({semanticSimilarityGrade.grade})</span>
-                            </TableCell>
+                            
+                            {tableParams.map((paramName) => {
+                              const evaluation = conv.evaluations.find(e => e.name === paramName);
+                              const grade = evaluation ? getGrade(evaluation.score) : { grade: 'N/A', color: 'text-muted-foreground' };
+                              
+                              return (
+                                <TableCell key={paramName} className="text-center">
+                                  <span className={`font-semibold ${grade.color}`}>
+                                    {evaluation ? evaluation.score.toFixed(2) : 'N/A'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground ml-1">({grade.grade})</span>
+                                </TableCell>
+                              );
+                            })}
+                            
                             <TableCell className="text-right">
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -695,19 +845,15 @@ const Report: React.FC = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="left" className="max-w-xs text-sm p-3 bg-popover text-popover-foreground border-border shadow-lg rounded-md">
-                                  {hallucinationEval && (
-                                    <div className="mb-2">
-                                      <p className="font-semibold">Hallucination Comment:</p>
-                                      <p className="text-xs">{hallucinationEval.comment}</p>
-                                    </div>
-                                  )}
-                                  {semanticSimilarityEval && (
-                                    <div>
-                                      <p className="font-semibold">Semantic Similarity Comment:</p>
-                                      <p className="text-xs">{semanticSimilarityEval.comment}</p>
-                                    </div>
-                                  )}
-                                  {(!hallucinationEval && !semanticSimilarityEval) && <p>No comments available.</p>}
+                                  <div className="space-y-2">
+                                    {conv.evaluations.map((evaluation, index) => (
+                                      <div key={index}>
+                                        <p className="font-semibold">{evaluation.name}:</p>
+                                        <p className="text-xs">{evaluation.comment || 'No comment available'}</p>
+                                      </div>
+                                    ))}
+                                    {conv.evaluations.length === 0 && <p>No evaluations available.</p>}
+                                  </div>
                                 </TooltipContent>
                               </Tooltip>
                             </TableCell>
