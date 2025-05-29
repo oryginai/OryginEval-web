@@ -243,7 +243,7 @@ const AllDatasets: React.FC = () => {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">All Datasets</h2>
+          <h2 className="text-2xl font-bold">Ground Truth</h2>
           <p className="text-muted-foreground mt-1">
             View and manage all datasets for this project
           </p>

@@ -295,12 +295,11 @@ const Report: React.FC = () => {
         .flatMap(result => result.evaluations)
         .filter(evaluation => evaluation.name === paramName)
         .map(evaluation => evaluation.score);
-      
-      const avgScore = scores.length > 0 
+        const avgScore = scores.length > 0 
         ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
         : 0;
 
-      const grade = getGrade(avgScore);
+      const grade = getGrade(avgScore, paramName);
       const IconComponent = getParameterIcon(paramName);
 
       parameters.push({
@@ -319,20 +318,19 @@ const Report: React.FC = () => {
 
     return parameters;
   };
-
   // Helper function to get icon for parameter
   const getParameterIcon = (paramName: string) => {
     switch (paramName.toLowerCase()) {
-      case "hallucination":
-        return AlertTriangle;
-      case "semantic similarity":
-        return Smile;
-      case "accuracy score":
-      case "accuracy":
-        return Target;
-      case "toxicity score":
-      case "toxicity":
-        return ShieldAlert;
+      // case "hallucination":
+      //   return AlertTriangle;
+      // case "semantic similarity":
+      //   return Smile;
+      // case "accuracy score":
+      // case "accuracy":
+      //   return Target;
+      // case "toxicity score":
+      // case "toxicity":
+      //   return ShieldAlert;
       default:
         return TrendingUp;
     }
@@ -354,13 +352,20 @@ const Report: React.FC = () => {
       default:
         return "Parameter score (0-1 scale)";
     }
-  };
-  // Helper function to get letter grade and color
-  const getGrade = (score: number): { grade: string; color: string } => {
-    if (score >= 0.9) return { grade: "A", color: "text-green-500" };
-    if (score >= 0.8) return { grade: "B", color: "text-blue-500" };
-    if (score >= 0.7) return { grade: "C", color: "text-yellow-500" };
-    if (score >= 0.6) return { grade: "D", color: "text-orange-500" };
+  };  // Helper function to get letter grade and color
+  const getGrade = (score: number, paramName?: string): { grade: string; color: string } => {
+    // For parameters where lower is better, invert the scoring
+    const isLowerBetter = paramName && (
+      paramName.toLowerCase().includes('toxicity') || 
+      paramName.toLowerCase().includes('hallucination')
+    );
+    
+    const effectiveScore = isLowerBetter ? (1 - score) : score;
+    
+    if (effectiveScore >= 0.9) return { grade: "A", color: "text-green-500" };
+    if (effectiveScore >= 0.8) return { grade: "B", color: "text-blue-500" };
+    if (effectiveScore >= 0.7) return { grade: "C", color: "text-yellow-500" };
+    if (effectiveScore >= 0.6) return { grade: "D", color: "text-orange-500" };
     return { grade: "F", color: "text-red-500" };
   };
 
@@ -822,10 +827,9 @@ const Report: React.FC = () => {
                           <TableRow key={conv.convoid}>
                             <TableCell className="font-medium">{conv.convoid}</TableCell>
                             <TableCell className="text-center">{conv.response_time.toFixed(2)}</TableCell>
-                            
-                            {tableParams.map((paramName) => {
+                              {tableParams.map((paramName) => {
                               const evaluation = conv.evaluations.find(e => e.name === paramName);
-                              const grade = evaluation ? getGrade(evaluation.score) : { grade: 'N/A', color: 'text-muted-foreground' };
+                              const grade = evaluation ? getGrade(evaluation.score, paramName) : { grade: 'N/A', color: 'text-muted-foreground' };
                               
                               return (
                                 <TableCell key={paramName} className="text-center">
