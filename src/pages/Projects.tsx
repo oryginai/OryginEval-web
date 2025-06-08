@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,7 @@ const Projects: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();  const [newProject, setNewProject] = useState({
     name: '',
     test_endpoint: '',
+    headers: '',
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
@@ -76,16 +78,28 @@ const Projects: React.FC = () => {
       return;
     }
 
+    // Parse headers if provided
+    let headersObject = {};
+    if (newProject.headers.trim()) {
+      try {
+        headersObject = JSON.parse(newProject.headers.trim());
+      } catch (error) {
+        toast.error('Invalid JSON format for headers. Please provide valid JSON or leave empty.');
+        return;
+      }
+    }
+
     setIsSubmittingCreate(true);
-    try {      const projectData = {
+    try {
+      const projectData = {
         name: projectName,
         labrat_json: {
           endpoint: endpoint,
-          headers: {}
+          headers: headersObject
         }
       };
       await createProject(projectData);
-      setNewProject({ name: '', test_endpoint: '' });
+      setNewProject({ name: '', test_endpoint: '', headers: '' });
       setIsDialogOpen(false);
       await fetchProjects();
     } catch (error) {
@@ -170,6 +184,24 @@ const Projects: React.FC = () => {
                     })
                   }
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="headers">Headers (Optional)</Label>
+                <Textarea
+                  id="headers"
+                  placeholder='{"Authorization": "Bearer your-token", "Content-Type": "application/json"}'
+                  value={newProject.headers}
+                  onChange={e =>
+                    setNewProject({
+                      ...newProject,
+                      headers: e.target.value,
+                    })
+                  }
+                  className="min-h-[80px]"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter headers as JSON format. Leave empty if no custom headers needed.
+                </p>
               </div>
             </div>
             <DialogFooter>

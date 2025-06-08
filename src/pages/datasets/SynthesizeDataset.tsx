@@ -272,7 +272,7 @@ const SynthesizeDataset: React.FC = () => {
         `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
         {
           sample_data: sampleData,
-          num_samples: 3,
+          num_samples: 10,
           extra_info: extraInfo
         }
       );

@@ -25,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { Plus, Timer, AlertTriangle, Smile, ListChecks, Lightbulb, Target, ShieldAlert, TrendingUp, BarChartHorizontalBig, Info, LineChart as LineChartLucide, Radar as RadarLucide, Download } from "lucide-react"; // Aliased LineChart and Radar
+import { Plus, Timer, AlertTriangle, Smile, ListChecks, Lightbulb, Target, ShieldAlert, TrendingUp, BarChartHorizontalBig, Info, LineChart as LineChartLucide, Radar as RadarLucide, Download, FileSpreadsheet } from "lucide-react"; // Aliased LineChart and Radar
 import {
   BarChart,
   Bar,
@@ -43,6 +43,7 @@ import {
   Line,
   Legend,
 } from "recharts";
+import * as XLSX from 'xlsx';
 import { ApiClient } from "@/lib/api-client";
 
 // Define interfaces for the new data structure
@@ -481,9 +482,7 @@ const Report: React.FC = () => {
         // Finally simulation data (renamed from eval_results)
         simulation_data: reportData.eval_results
       }
-    };
-
-    // Create and download the file
+    };    // Create and download the file
     const blob = new Blob([JSON.stringify(jsonReport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -493,7 +492,149 @@ const Report: React.FC = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };// Prepare chart data - dynamically based on actual parameters from API response
+  };
+
+  // Function to download Excel report with structured sheets
+  const downloadExcelReport = () => {
+    if (!reportData) return;
+
+    // Create a new workbook
+    const workbook = XLSX.utils.book_new();
+
+    // Sheet 1: Summary
+    const summaryData = [
+      ['Evaluation Report Summary'],
+      [''],
+      ['Experiment Name', experimentName],
+      ['Project Name', projectName],
+      ['Export Date', new Date().toLocaleDateString()],
+      ['Export Time', new Date().toLocaleTimeString()],
+      [''],
+      ['Overall Metrics'],
+      ['Conversations Tested', reportData.overall_eval_results.conversations_tested],
+      ['Average Response Time (s)', reportData.overall_eval_results.average_response_time.toFixed(2)],
+      ['Semantic Similarity', reportData.overall_eval_results["Semantic Similarity"].toFixed(2)],
+      [''],
+      ['Parameter Summary']
+    ];
+
+    // Add dynamic parameter scores to summary
+    const uniqueParams = new Set<string>();
+    reportData.eval_results.forEach(result => {
+      result.evaluations.forEach(evaluation => {
+        if (evaluation.name !== "Semantic Similarity") {
+          uniqueParams.add(evaluation.name);
+        }
+      });
+    });
+
+    uniqueParams.forEach(paramName => {
+      const scores = reportData.eval_results
+        .flatMap(result => result.evaluations)
+        .filter(evaluation => evaluation.name === paramName)
+        .map(evaluation => evaluation.score);
+      
+      const avgScore = scores.length > 0 
+        ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+        : 0;
+      
+      const grade = getGrade(avgScore, paramName);
+      summaryData.push([paramName, avgScore.toFixed(2), grade.grade]);
+    });
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    
+    // Set column widths for summary sheet
+    summarySheet['!cols'] = [
+      { width: 25 },
+      { width: 20 },
+      { width: 10 }
+    ];    // Sheet 2: Conversation Details
+    const conversationHeaders = ['Conversation ID', 'Response Time (s)'];
+    const allParams = Array.from(uniqueParams);
+    conversationHeaders.push(...allParams);
+    conversationHeaders.push('Grade Summary', 'Simulated Conversation');
+
+    const conversationData = [conversationHeaders];
+    
+    reportData.eval_results.forEach(conv => {
+      const row = [
+        conv.convoid,
+        conv.response_time.toFixed(2)
+      ];
+      
+      // Add parameter scores
+      allParams.forEach(paramName => {
+        const evaluation = conv.evaluations.find(e => e.name === paramName);
+        row.push(evaluation ? evaluation.score.toFixed(2) : 'N/A');
+      });
+      
+      // Add grade summary
+      const grades = conv.evaluations.map(e => getGrade(e.score, e.name).grade).join(', ');
+      row.push(grades);
+      
+      // Add simulated conversation
+      row.push(conv.conversation || 'No conversation data available');
+      
+      conversationData.push(row);
+    });
+
+    const conversationSheet = XLSX.utils.aoa_to_sheet(conversationData);
+      // Set column widths for conversation sheet
+    const conversationCols = [{ width: 15 }, { width: 15 }];
+    allParams.forEach(() => conversationCols.push({ width: 12 }));
+    conversationCols.push({ width: 20 }, { width: 60 }); // Grade Summary and Simulated Conversation columns
+    conversationSheet['!cols'] = conversationCols;// Sheet 3: Comments & Insights (Key Insights first, then conversation comments)
+    const commentsData = [
+      ['Comments & Insights'],
+      [''],
+      ['Key Insights'],
+      ['']
+    ];
+
+    // Add key insights first
+    reportData.insights.forEach((insight, index) => {
+      commentsData.push([`${index + 1}.`, insight]);
+    });
+
+    // Add separator and conversation comments section
+    commentsData.push([''], [''], ['Conversation Comments'], [''], ['Conversation ID', 'Parameter', 'Score', 'Grade', 'Comment']);
+
+    // Add conversation comments
+    reportData.eval_results.forEach(conv => {
+      conv.evaluations.forEach(evaluation => {
+        const grade = getGrade(evaluation.score, evaluation.name);
+        commentsData.push([
+          conv.convoid,
+          evaluation.name,
+          evaluation.score.toFixed(2),
+          grade.grade,
+          evaluation.comment || 'No comment available'
+        ]);
+      });
+    });
+
+    const commentsSheet = XLSX.utils.aoa_to_sheet(commentsData);
+    
+    // Set column widths for comments sheet
+    commentsSheet['!cols'] = [
+      { width: 15 },
+      { width: 20 },
+      { width: 10 },
+      { width: 8 },
+      { width: 50 }
+    ];
+
+    // Add sheets to workbook
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+    XLSX.utils.book_append_sheet(workbook, conversationSheet, 'Conversation Details');
+    XLSX.utils.book_append_sheet(workbook, commentsSheet, 'Comments & Insights');
+
+    // Download the Excel file
+    XLSX.writeFile(workbook, `evaluation-report-${experimentId}-${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+// Prepare chart data - dynamically based on actual parameters from API response
   const overallMetricsForChart = reportData
     ? (() => {
         // Get unique parameter names from eval results (including Semantic Similarity for radar chart)
@@ -625,7 +766,15 @@ const Report: React.FC = () => {
               className="gap-2"
             >
               <Download className="h-4 w-4" />
-              Download Report
+              Download JSON
+            </Button>
+            <Button
+              onClick={downloadExcelReport}
+              variant="outline"
+              className="gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Download Excel
             </Button>
             <Button
               onClick={() => navigate(`/projects/${projectId}/evaluation/create-experiment`)}

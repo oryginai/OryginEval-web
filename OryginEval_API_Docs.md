@@ -309,12 +309,15 @@ Calculate cost based on token usage.
 | `dataset_ids` | `list[uuid]` | List of associated dataset IDs |
 | `parameter_ids` | `list[uuid]` | List of associated parameter IDs |
 | `experiment_ids` | `list[uuid]` | List of associated experiment IDs |
-| `labrat_json` | `json` | Configuration object with `endpoint` (string) and `headers` (None) |
+| `labrat_json` | `json` | Configuration object with `endpoint` (string) and `headers` (object) |
 **Sample `labrat`:**
 ```json
 {
   endpoint: string,
-  headers: None
+  headers: {
+    "Authorization": "Bearer token",
+    "Content-Type": "application/json"
+  }
 }
 ```
 

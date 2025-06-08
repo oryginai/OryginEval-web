@@ -102,7 +102,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       const projectDataWithApiKey = {
         'project_name': data.name || '',
-        'labrat': {'endpoint': data.labrat_json?.endpoint || ''}
+        'labrat': {
+          'endpoint': data.labrat_json?.endpoint || '',
+          'headers': data.labrat_json?.headers || {}
+        }
       };
 
       const projectId = uuidv4();
