@@ -31,8 +31,9 @@ const SynthesizeDataset: React.FC = () => {
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [step, setStep] = useState(0); // 0: form, 1: review generated
   const [isDatasetReady, setIsDatasetReady] = useState(false);
-  const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);
+  const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);  
   const [extraInfo, setExtraInfo] = useState("");
+  const [numSamples, setNumSamples] = useState(10);
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { 
       id: `sample-${Date.now()}`, 
@@ -272,7 +273,7 @@ const SynthesizeDataset: React.FC = () => {
         `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
         {
           sample_data: sampleData,
-          num_samples: 10,
+          num_samples: numSamples,
           extra_info: extraInfo
         }
       );
@@ -351,6 +352,7 @@ const SynthesizeDataset: React.FC = () => {
             setGeneratedConversations([]);
             setDatasetName("");
             setExtraInfo("");
+            setNumSamples(10);
             setSampleConversations([
               { 
                 id: `sample-${Date.now()}`, 
@@ -451,7 +453,24 @@ const SynthesizeDataset: React.FC = () => {
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Another Conversation
-            </Button>
+            </Button>          
+          </div>
+
+          <div className="orygin-card p-6">
+            <Label htmlFor="num-samples">Number of Samples</Label>
+            <Input
+              id="num-samples"
+              type="number"
+              min="1"
+              max="100"
+              value={numSamples}
+              onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
+              placeholder="Enter number of conversations to generate"
+              className="mt-1"
+            />
+            <p className="text-sm text-muted-foreground mt-1">
+              Specify how many conversations to generate (1-100)
+            </p>
           </div>
 
           <div className="orygin-card p-6">

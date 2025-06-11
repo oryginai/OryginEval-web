@@ -60,8 +60,9 @@ const Home: React.FC = () => {
   const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
   const [isCalculatingCost, setIsCalculatingCost] = useState(false);  const [datasetId, setDatasetId] = useState<string | null>(null);
   const [isGeneratingDataset, setIsGeneratingDataset] = useState(false);
-  const [isDatasetReady, setIsDatasetReady] = useState(false);
+  const [isDatasetReady, setIsDatasetReady] = useState(false);  
   const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);
+  const [numSamples, setNumSamples] = useState(10);
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
@@ -152,9 +153,10 @@ const Home: React.FC = () => {
     setEstimatedPrice(null);
     setIsCalculatingCost(false);
     setDatasetId(null);
-    setIsGeneratingDataset(false);
+    setIsGeneratingDataset(false);    
     setIsDatasetReady(false);
     setGeneratedConversations([]);
+    setNumSamples(10);
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
@@ -384,7 +386,7 @@ const Home: React.FC = () => {
           `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
           {
             sample_data: sampleData,
-            num_samples: 10,
+            num_samples: numSamples,
             extra_info: botInstructions
           }
         );
@@ -563,6 +565,7 @@ const Home: React.FC = () => {
             setIsGeneratingDataset(false);
             setIsDatasetReady(false);
             setGeneratedConversations([]);
+            setNumSamples(10);
             setSampleConversations([
               { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
             ]);
@@ -637,18 +640,40 @@ const Home: React.FC = () => {
           <div className="mt-6">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-md">Bot Instructions</CardTitle>
+                <CardTitle className="text-md">Dataset Configuration</CardTitle>
                 <CardDescription>
-                  Provide information about how the bot should respond to help synthesize relevant conversations
+                  Configure the dataset generation settings
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Textarea
-                  placeholder="e.g., 'The bot is supposed to answer in short paragraphs', 'The bot should provide code examples', etc."
-                  value={botInstructions}
-                  onChange={(e) => setBotInstructions(e.target.value)}
-                  className="min-h-20"
-                />
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="num-samples">Number of Samples</Label>
+                  <Input
+                    id="num-samples"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={numSamples}
+                    onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
+                    placeholder="Enter number of conversations to generate"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Specify how many conversations to generate (1-100)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bot-instructions">Bot Instructions</Label>
+                  <Textarea
+                    id="bot-instructions"
+                    placeholder="e.g., 'The bot is supposed to answer in short paragraphs', 'The bot should provide code examples', etc."
+                    value={botInstructions}
+                    onChange={(e) => setBotInstructions(e.target.value)}
+                    className="min-h-20"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Provide information about how the bot should respond to help synthesize relevant conversations
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>
