@@ -128,16 +128,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       email_confirmed_at: data.user?.email_confirmed_at,
       created_at: data.user?.created_at
     });
-    
-    // When Supabase returns a user but no session, it usually means:
-    // 1. User already exists and is confirmed (no new signup needed)
-    // 2. User already exists but is not confirmed (resent confirmation)
+      // Handle different signup scenarios:
+    // - If user and session exist: immediate signin (email confirmation disabled)
+    // - If user exists but no session: check if it's a duplicate or new signup
     if (data.user && !data.session) {
-      // Check if user has email_confirmed_at - if yes, they already exist
-      if (data.user.email_confirmed_at !== null) {
+      // Check if this is a truly new user vs existing user
+      // New users will have created_at very recent (within last few seconds)
+      const userCreatedAt = new Date(data.user.created_at);
+      const now = new Date();
+      const timeDifference = now.getTime() - userCreatedAt.getTime();
+      const isNewUser = timeDifference < 5000; // Less than 5 seconds ago
+      
+      // If user was created more than 5 seconds ago, it's likely an existing account
+      if (!isNewUser && data.user.email_confirmed_at !== null) {
         throw new Error('An account with this email already exists. Please sign in instead.');
       }
-      // If email_confirmed_at is null, it's a legitimate resend of confirmation
+      
+      // For new users or unconfirmed existing users, let them proceed
+      // They should check their email for confirmation
     }
   };
   // Reset password
