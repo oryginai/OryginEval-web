@@ -7,8 +7,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, MoreVertical, Trash2, Database, Upload, FileText, Eye, ChevronDown, ChevronUp, Edit3, Save, X } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Database, Upload, FileText, Eye, ChevronDown, ChevronUp, Edit3, Save, X, Download } from "lucide-react";
 import { Dataset } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import {
@@ -40,6 +41,7 @@ const AllDatasets: React.FC = () => {
   const [viewingDataset, setViewingDataset] = useState<string | null>(null);
   const [editingDataset, setEditingDataset] = useState<string | null>(null);
   const [editedConversations, setEditedConversations] = useState<Conversation[]>([]);
+  const [editedDatasetName, setEditedDatasetName] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   // Fetch datasets
   useEffect(() => {
@@ -56,7 +58,7 @@ const AllDatasets: React.FC = () => {
         if (responseData && responseData.datasets && Array.isArray(responseData.datasets)) {
           const transformedDatasets: Dataset[] = responseData.datasets.map((dataset: any) => ({
             id: dataset.dataset_id,
-            name: dataset.name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`, // Use API name if available, otherwise generate one
+            name: dataset.dataset_name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`, // Use API name if available, otherwise generate one
             project_id: projectId || "",
             created_at: dataset.created_at,
             conversations: (dataset.dataset_json || []).map((conv: any) => ({
@@ -107,6 +109,7 @@ const AllDatasets: React.FC = () => {
   const handleEditStart = (dataset: Dataset) => {
     setEditingDataset(dataset.id);
     setEditedConversations([...dataset.conversations]);
+    setEditedDatasetName(dataset.name);
     setViewingDataset(dataset.id); // Also show the details
   };
 
@@ -114,6 +117,7 @@ const AllDatasets: React.FC = () => {
   const handleEditCancel = () => {
     setEditingDataset(null);
     setEditedConversations([]);
+    setEditedDatasetName("");
   };
 
   // Update a message in edited conversations
@@ -167,6 +171,12 @@ const AllDatasets: React.FC = () => {
   const saveEditedDataset = async () => {
     if (!editingDataset) return;
 
+    // Validate that dataset name is not empty
+    if (!editedDatasetName.trim()) {
+      toast.error("Please enter a dataset name");
+      return;
+    }
+
     // Validate that all messages have content
     const isValid = editedConversations.every(conv => 
       conv.messages.every(msg => msg.content.trim().length > 0)
@@ -184,7 +194,8 @@ const AllDatasets: React.FC = () => {
         dataset: editedConversations.map(conv => ({
           id: conv.id,
           conversation: conv.messages
-        }))
+        })),
+        dataset_name: editedDatasetName.trim()
       };
 
       console.log("Updating dataset with edited conversations:", datasetData);
@@ -196,13 +207,14 @@ const AllDatasets: React.FC = () => {
         // Update local state
         setDatasets(datasets.map(dataset => 
           dataset.id === editingDataset 
-            ? { ...dataset, conversations: editedConversations }
+            ? { ...dataset, name: editedDatasetName.trim(), conversations: editedConversations }
             : dataset
         ));
         
         toast.success("Dataset updated successfully!");
         setEditingDataset(null);
         setEditedConversations([]);
+        setEditedDatasetName("");
       } else {
         toast.error("Failed to update dataset. Please try again.");
       }
@@ -211,6 +223,53 @@ const AllDatasets: React.FC = () => {
       toast.error("Failed to update dataset. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Download dataset as JSON
+  const downloadDataset = (dataset: Dataset) => {
+    try {
+      // Prepare the dataset data in a clean JSON format
+      const datasetData = {
+        dataset_name: dataset.name,
+        dataset_id: dataset.id,
+        created_at: dataset.created_at,
+        project_id: dataset.project_id,
+        conversations: dataset.conversations.map(conv => ({
+          id: conv.id,
+          messages: conv.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content
+          }))
+        }))
+      };
+
+      // Create a blob with the JSON data
+      const jsonString = JSON.stringify(datasetData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      
+      // Create a download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with dataset name and timestamp
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+      const fileName = `${dataset.name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.json`;
+      link.download = fileName;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Dataset "${dataset.name}" downloaded successfully!`);
+    } catch (error) {
+      console.error("Error downloading dataset:", error);
+      toast.error("Failed to download dataset");
     }
   };
 
@@ -345,6 +404,10 @@ const AllDatasets: React.FC = () => {
                                   <FileText className="mr-2 h-4 w-4" />
                                   Use in Experiment
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => downloadDataset(dataset)}>
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Download Dataset
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteClick(dataset.id, dataset.name)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
@@ -399,6 +462,20 @@ const AllDatasets: React.FC = () => {
                                 {editingDataset === dataset.id ? (
                                   // Edit Mode
                                   <>
+                                    {/* Dataset Name Editor */}
+                                    <div className="mb-4 p-4 border border-border rounded-md bg-muted/50">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="dataset-name">Dataset Name</Label>
+                                        <Input
+                                          id="dataset-name"
+                                          value={editedDatasetName}
+                                          onChange={(e) => setEditedDatasetName(e.target.value)}
+                                          placeholder="Enter dataset name..."
+                                          className="font-medium"
+                                        />
+                                      </div>
+                                    </div>
+                                    
                                     {editedConversations.length > 0 ? (
                                       <div className="space-y-3 max-h-96 overflow-y-auto">
                                         {editedConversations.map((conversation, idx) => (

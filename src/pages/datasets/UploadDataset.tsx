@@ -136,7 +136,11 @@ const UploadDataset: React.FC = () => {
       try {
       // In a real app, this would call the API to upload the dataset
       // await new Promise(resolve => setTimeout(resolve, 1000));
-      const datasetData = {"dataset":conversations, "project_id": projectId}
+      const datasetData = {
+        "dataset": conversations, 
+        "project_id": projectId, 
+        "dataset_name": datasetName
+      }
       console.log("Uploading dataset:", datasetData);
       const response = await ApiClient.post(`/datasets-create?dataset_id=${uuidv4()}`,datasetData)
       console.log("Dataset upload response:", response);

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,24 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, FileText, Database, RefreshCw } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, FileText, Database, RefreshCw, Edit3, Save, X, Trash2 } from "lucide-react";
 import { Dataset, Parameter } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
@@ -41,6 +57,7 @@ const CreateExperiment: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [experimentName, setExperimentName] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");  const [selectedParameterIds, setSelectedParameterIds] = useState<string[]>([]);
+  const [workers, setWorkers] = useState<number>(10); // Default value of 10 workers
   
   // Cost calculation state
   const [priceQuoted, setPriceQuoted] = useState(false);
@@ -50,6 +67,18 @@ const CreateExperiment: React.FC = () => {
   // Fetch datasets and parameters from API
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [parameters, setParameters] = useState<Parameter[]>([]);
+
+  // Edit functionality states for CreateExperiment page
+  const [editingParameterId, setEditingParameterId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    tolerance: "0.5"
+  });
+  const [editToleranceError, setEditToleranceError] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [parameterToDelete, setParameterToDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,7 +92,7 @@ const CreateExperiment: React.FC = () => {
           // Transform API response to match frontend Dataset interface
           const transformedDatasets: Dataset[] = (datasetsResponse.data as any).datasets.map((dataset: any) => ({
             id: dataset.dataset_id,
-            name: dataset.name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`,
+            name: dataset.dataset_name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`,
             project_id: projectId || "",
             created_at: dataset.created_at,
             conversations: (dataset.dataset_json || []).map((conv: any) => ({
@@ -87,6 +116,7 @@ const CreateExperiment: React.FC = () => {
             id: param.parameter_id,
             name: param.name,
             description: param.description,
+            tolerance: param.tolerance || 0.5, // API returns 'tolerance' in response
             project_id: projectId || "",
             created_at: param.created_at || new Date().toISOString()
           }));
@@ -213,7 +243,8 @@ const CreateExperiment: React.FC = () => {
         experiment_name: experimentName,
         dataset_id: selectedDatasetId,
         parameter_ids: selectedParameterIds,
-        labrat_json: labratJson
+        labrat_json: labratJson,
+        workers: workers
       };
       
       console.log("Labrat JSON from project details:", labratJson);
@@ -240,6 +271,126 @@ const CreateExperiment: React.FC = () => {
       toast.error("Failed to create experiment. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Edit functionality functions for CreateExperiment page
+  const handleEditParameterStart = (param: Parameter) => {
+    setEditingParameterId(param.id);
+    setEditForm({
+      name: param.name,
+      description: param.description,
+      tolerance: (param.tolerance || 0.5).toString()
+    });
+    setEditToleranceError("");
+  };
+
+  // Handle cancel edit
+  const handleEditParameterCancel = () => {
+    setEditingParameterId(null);
+    setEditForm({ name: "", description: "", tolerance: "0.5" });
+    setEditToleranceError("");
+  };
+
+  // Handle edit tolerance change
+  const handleEditParameterToleranceChange = (value: string) => {
+    setEditForm({ ...editForm, tolerance: value });
+    
+    if (value.trim() === "") {
+      setEditToleranceError("");
+      return;
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setEditToleranceError("Must be a valid number");
+    } else if (num < 0 || num > 1) {
+      setEditToleranceError("Must be between 0 and 1");
+    } else {
+      setEditToleranceError("");
+    }
+  };
+
+  // Save edited parameter
+  const saveEditedParameter = async () => {
+    if (!editingParameterId) return;
+
+    if (!editForm.name.trim() || !editForm.description.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    // Validate tolerance
+    const toleranceValue = parseFloat(editForm.tolerance);
+    if (isNaN(toleranceValue) || toleranceValue < 0 || toleranceValue > 1) {
+      setEditToleranceError("Tolerance must be a number between 0 and 1");
+      toast.error("Tolerance must be a number between 0 and 1");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const updateBody = {
+        parameter_name: editForm.name.trim(),
+        parameter_description: editForm.description.trim(),
+        parameter_tolerance: toleranceValue
+      };
+
+      const response = await ApiClient.post(`/parameters-update?parameter_id=${editingParameterId}`, updateBody);
+      console.log("Update Parameter API Response:", response);
+
+      if (response.data || !response.error) {
+        // Update local state
+        setParameters(parameters.map(param => 
+          param.id === editingParameterId 
+            ? { ...param, name: editForm.name.trim(), description: editForm.description.trim(), tolerance: toleranceValue }
+            : param
+        ));
+        
+        toast.success("Parameter updated successfully!");
+        handleEditParameterCancel();
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to update parameter");
+      }
+    } catch (error) {
+      console.error("Error updating parameter:", error);
+      toast.error("Failed to update parameter");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Handle delete parameter click
+  const handleDeleteParameterClick = (id: string, name: string) => {
+    setParameterToDelete({ id, name });
+    setDeleteConfirmOpen(true);
+  };
+
+  // Delete parameter
+  const deleteParameter = async () => {
+    if (!parameterToDelete || !projectId) return;
+
+    try {
+      const response = await ApiClient.post(`/parameters-delete?parameter_id=${parameterToDelete.id}&project_id=${projectId}`, {});
+      console.log("Delete Parameter API Response:", response);
+      
+      if (response.data || !response.error) {
+        // Remove parameter from local state
+        setParameters(parameters.filter(param => param.id !== parameterToDelete.id));
+        // Also remove from selected parameters if it was selected
+        setSelectedParameterIds(selectedParameterIds.filter(id => id !== parameterToDelete.id));
+        toast.success("Parameter deleted successfully");
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to delete parameter");
+      }
+    } catch (error) {
+      console.error("Error deleting parameter:", error);
+      toast.error("Failed to delete parameter");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setParameterToDelete(null);
     }
   };
 
@@ -386,6 +537,21 @@ const CreateExperiment: React.FC = () => {
                   placeholder="e.g., GPT-4 Evaluation Round 1"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="workers">Number of Workers (Optional)</Label>
+                <Input
+                  id="workers"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={workers}
+                  onChange={(e) => setWorkers(parseInt(e.target.value) || 10)}
+                  placeholder="10"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Number of parallel threads to use for running this experiment. Default is 10.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -499,26 +665,127 @@ const CreateExperiment: React.FC = () => {
           <CardContent>
             <div className="space-y-4">
               {parameters.map((parameter) => (
-                <div
-                  key={parameter.id}
-                  className="flex items-start space-x-3 py-2"
-                >
-                  <Checkbox
-                    id={parameter.id}
-                    checked={selectedParameterIds.includes(parameter.id)}
-                    onCheckedChange={() => toggleParameter(parameter.id)}
-                  />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor={parameter.id}
-                      className="font-medium cursor-pointer"
-                    >
-                      {parameter.name}
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      {parameter.description}
-                    </p>
-                  </div>
+                <div key={parameter.id} className="flex items-start space-x-3 p-3 border border-border rounded-md">
+                  {editingParameterId === parameter.id ? (
+                    // Edit Mode
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-name-${parameter.id}`}>Parameter Name</Label>
+                        <Input
+                          id={`edit-name-${parameter.id}`}
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          placeholder="e.g., Response Quality"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-description-${parameter.id}`}>Description</Label>
+                        <Textarea
+                          id={`edit-description-${parameter.id}`}
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          placeholder="Describe what this parameter evaluates..."
+                          className="min-h-20"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-tolerance-${parameter.id}`}>Tolerance</Label>
+                        <Input
+                          id={`edit-tolerance-${parameter.id}`}
+                          type="text"
+                          value={editForm.tolerance}
+                          onChange={(e) => handleEditParameterToleranceChange(e.target.value)}
+                          placeholder="0.5"
+                          className={editToleranceError ? "border-red-500" : ""}
+                        />
+                        {editToleranceError && (
+                          <p className="text-xs text-red-500">{editToleranceError}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          How strictly this parameter will be judged (0 = extremely strict, 1 = very lenient)
+                        </p>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleEditParameterCancel}
+                          disabled={isSavingEdit}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={saveEditedParameter}
+                          disabled={isSavingEdit || !editForm.name.trim() || !editForm.description.trim()}
+                          className="bg-primary hover:bg-orygin-red-hover text-white"
+                        >
+                          <Save className="h-4 w-4 mr-1" />
+                          {isSavingEdit ? "Saving..." : "Save Changes"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View Mode
+                    <>
+                      <Checkbox
+                        id={parameter.id}
+                        checked={selectedParameterIds.includes(parameter.id)}
+                        onCheckedChange={() => toggleParameter(parameter.id)}
+                      />
+                      <div className="flex-1 space-y-1">
+                        <Label
+                          htmlFor={parameter.id}
+                          className="font-medium cursor-pointer"
+                        >
+                          {parameter.name}
+                        </Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="text-sm text-muted-foreground cursor-help">
+                                {parameter.description.length > 100 
+                                  ? `${parameter.description.substring(0, 100)}...` 
+                                  : parameter.description}
+                              </p>
+                            </TooltipTrigger>
+                            {parameter.description.length > 100 && (
+                              <TooltipContent className="max-w-md p-3">
+                                <p className="text-sm">{parameter.description}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
+                        <p className="text-xs text-muted-foreground">
+                          Tolerance: {parameter.tolerance?.toFixed(1) || '0.5'} {parameter.tolerance !== undefined && (parameter.tolerance <= 0.3 ? '(Strict)' : parameter.tolerance >= 0.7 ? '(Lenient)' : '(Moderate)')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditParameterStart(parameter)}
+                          className="h-6 w-6 text-muted-foreground hover:text-blue-600"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                          <span className="sr-only">Edit parameter</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteParameterClick(parameter.id, parameter.name)}
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span className="sr-only">Delete parameter</span>
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -590,6 +857,98 @@ const CreateExperiment: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      {/* Edit Parameter Dialog */}
+      {editingParameterId && (
+        <AlertDialog open={Boolean(editingParameterId)} onOpenChange={handleEditParameterCancel}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Edit Parameter</AlertDialogTitle>
+              <AlertDialogDescription>
+                Modify the details of the selected parameter
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="p-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Parameter Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    placeholder="e.g., Max Tokens"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Textarea
+                    id="edit-description"
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    placeholder="e.g., The maximum number of tokens to generate."
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-tolerance">Tolerance</Label>
+                  <Input
+                    id="edit-tolerance"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                    value={editForm.tolerance}
+                    onChange={(e) => handleEditParameterToleranceChange(e.target.value)}
+                    placeholder="0.5"
+                  />
+                  {editToleranceError && (
+                    <p className="text-red-500 text-sm">{editToleranceError}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 p-4">
+              <Button
+                variant="outline"
+                onClick={handleEditParameterCancel}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={saveEditedParameter}
+                className="bg-primary hover:bg-orygin-red-hover text-white"
+                disabled={isSavingEdit}
+              >
+                {isSavingEdit ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* Delete Parameter Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the parameter
+              "{parameterToDelete?.name}" and remove it from your project.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setParameterToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParameter}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2, ChevronDown, ChevronRight, RefreshCw } from "lucide-react"; // Added RefreshCw
+import { Plus, Trash2, ChevronDown, ChevronRight, RefreshCw, Edit3, Save, X } from "lucide-react"; // Added RefreshCw
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/contexts/ProjectContext";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,14 @@ import { toast } from "@/components/ui/sonner";
 import { mockData, Parameter } from "@/services/api";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Card,
   CardContent,
@@ -41,11 +49,21 @@ interface Conversation {
   messages: Message[];
 }
 
+// Dataset interface for existing datasets selection
+interface Dataset {
+  id: string;
+  name: string;
+  project_id: string;
+  created_at: string;
+  conversations: Conversation[];
+}
+
 // Enhanced parameter interface for Home page
 interface HomeParameter {
   id: string;
   name: string;
   description: string;
+  tolerance?: number; // Range 0-1, where 0 is extremely strict and 1 is lenient
   selected: boolean;
   isExpanded: boolean;
 }
@@ -63,17 +81,36 @@ const Home: React.FC = () => {
   const [isDatasetReady, setIsDatasetReady] = useState(false);  
   const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);
   const [numSamples, setNumSamples] = useState(10);
+  
+  // New states for dataset selection
+  const [synthesisMethod, setSynthesisMethod] = useState<"manual" | "existing">("manual");
+  const [existingDatasets, setExistingDatasets] = useState<Dataset[]>([]);
+  const [selectedExistingDatasetId, setSelectedExistingDatasetId] = useState<string>("");
+  const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
+  
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
   ]);
   const [botInstructions, setBotInstructions] = useState("");const [parameters, setParameters] = useState<HomeParameter[]>([]);
+  const [workers, setWorkers] = useState<number>(10); // Default value of 10 workers
   const [isLoadingParameters, setIsLoadingParameters] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [parameterToDelete, setParameterToDelete] = useState<{ id: string; index: number } | null>(null);
+  // Edit functionality states for Home page
+  const [editingParameterId, setEditingParameterId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    tolerance: "0.5"
+  });
+  const [editToleranceError, setEditToleranceError] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [newParameter, setNewParameter] = useState({
     name: "",
     description: "",
+    tolerance: "0.5", // Store as string to allow free typing
   });
+  const [toleranceError, setToleranceError] = useState("");
 
   // Fetch parameters when entering step 2
   useEffect(() => {
@@ -81,6 +118,45 @@ const Home: React.FC = () => {
       fetchParameters();
     }
   }, [step, projectId]);
+
+  // Fetch existing datasets for selection
+  const fetchExistingDatasets = async () => {
+    setIsLoadingDatasets(true);
+    try {
+      const response = await ApiClient.get('/datasets-list', { project_id: projectId });
+      console.log("Datasets API Response:", response);
+      
+      const responseData = response.data as { status?: string; datasets?: any[] };
+      
+      if (responseData && responseData.datasets && Array.isArray(responseData.datasets)) {
+        const transformedDatasets: Dataset[] = responseData.datasets.map((dataset: any) => ({
+          id: dataset.dataset_id,
+          name: dataset.dataset_name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`,
+          project_id: projectId || "",
+          created_at: dataset.created_at,
+          conversations: (dataset.dataset_json || []).map((conv: any) => ({
+            id: conv.id,
+            messages: (conv.conversation || []).map((msg: any) => ({
+              role: msg.role,
+              content: msg.content
+            }))
+          }))
+        }));
+        
+        setExistingDatasets(transformedDatasets);
+      } else {
+        console.warn("Unexpected API response structure:", response);
+        setExistingDatasets([]);
+      }
+    } catch (error) {
+      console.error("Error fetching existing datasets:", error);
+      toast.error("Failed to fetch existing datasets");
+      setExistingDatasets([]);
+    } finally {
+      setIsLoadingDatasets(false);
+    }
+  };
+
   const fetchParameters = async () => {
     setIsLoadingParameters(true);
     try {
@@ -93,6 +169,7 @@ const Home: React.FC = () => {
           id: param.parameter_id,
           name: param.name,
           description: param.description,
+          tolerance: param.tolerance || 0.5, // API returns 'tolerance' in response
           selected: true,
           isExpanded: false
         }));
@@ -157,11 +234,16 @@ const Home: React.FC = () => {
     setIsDatasetReady(false);
     setGeneratedConversations([]);
     setNumSamples(10);
+    setSynthesisMethod("manual");
+    setSelectedExistingDatasetId("");
+    // Fetch existing datasets when starting the flow
+    fetchExistingDatasets();
     setSampleConversations([
       { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
     ]);
     setParameters([]); // Reset parameters - they will be fetched when step 2 is reached
-    setNewParameter({ name: "", description: "" });
+    setNewParameter({ name: "", description: "", tolerance: "0.5" });
+    setToleranceError(""); // Clear any error
   };
 
   // Add a new conversation sample
@@ -222,17 +304,44 @@ const Home: React.FC = () => {
   const removeGeneratedConversation = (index: number) => {
     const updatedConversations = generatedConversations.filter((_, i) => i !== index);
     setGeneratedConversations(updatedConversations);
-  };// Add a new parameter
+  };  // Real-time tolerance validation
+  const handleToleranceChange = (value: string) => {
+    setNewParameter({ ...newParameter, tolerance: value });
+    
+    if (value.trim() === "") {
+      setToleranceError("");
+      return;
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setToleranceError("Must be a valid number");
+    } else if (num < 0 || num > 1) {
+      setToleranceError("Must be between 0 and 1");
+    } else {
+      setToleranceError("");
+    }
+  };
   const addParameter = async () => {
     if (!newParameter.name.trim() || !newParameter.description.trim()) {
       toast.error("Please fill in all fields");
       return;
     }
 
+    // Validate tolerance
+    const toleranceValue = parseFloat(newParameter.tolerance);
+    if (isNaN(toleranceValue) || toleranceValue < 0 || toleranceValue > 1) {
+      setToleranceError("Tolerance must be a number between 0 and 1");
+      toast.error("Tolerance must be a number between 0 and 1");
+      return;
+    }
+    setToleranceError(""); // Clear any previous error
+
     try {
       const parameterBody = {
         parameter_name: newParameter.name,
         parameter_description: newParameter.description,
+        parameter_tolerance: toleranceValue,
       };
       const parameterId = uuidv4();
       const response = await ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, parameterBody);
@@ -244,11 +353,13 @@ const Home: React.FC = () => {
           id: parameterId,
           name: newParameter.name,
           description: newParameter.description,
+          tolerance: toleranceValue,
           selected: true,
           isExpanded: true
         };
         setParameters([...parameters, newParam]);
-        setNewParameter({ name: "", description: "" });
+        setNewParameter({ name: "", description: "", tolerance: "0.5" });
+        setToleranceError(""); // Clear any error
         toast.success("Parameter created successfully");
       } else {
         console.error("API Error:", response.error);
@@ -293,6 +404,93 @@ const Home: React.FC = () => {
   // Remove a parameter (legacy function - now using delete confirmation)
   const removeParameter = (index: number) => {
     handleDeleteClick(index);
+  };
+
+  // Handle edit parameter for Home page
+  const handleEditParameterStart = (param: HomeParameter) => {
+    setEditingParameterId(param.id);
+    setEditForm({
+      name: param.name,
+      description: param.description,
+      tolerance: (param.tolerance || 0.5).toString()
+    });
+    setEditToleranceError("");
+  };
+
+  // Handle cancel edit for Home page
+  const handleEditParameterCancel = () => {
+    setEditingParameterId(null);
+    setEditForm({ name: "", description: "", tolerance: "0.5" });
+    setEditToleranceError("");
+  };
+
+  // Handle edit tolerance change for Home page
+  const handleEditParameterToleranceChange = (value: string) => {
+    setEditForm({ ...editForm, tolerance: value });
+    
+    if (value.trim() === "") {
+      setEditToleranceError("");
+      return;
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setEditToleranceError("Must be a valid number");
+    } else if (num < 0 || num > 1) {
+      setEditToleranceError("Must be between 0 and 1");
+    } else {
+      setEditToleranceError("");
+    }
+  };
+
+  // Save edited parameter for Home page
+  const saveEditedParameter = async () => {
+    if (!editingParameterId) return;
+
+    if (!editForm.name.trim() || !editForm.description.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    // Validate tolerance
+    const toleranceValue = parseFloat(editForm.tolerance);
+    if (isNaN(toleranceValue) || toleranceValue < 0 || toleranceValue > 1) {
+      setEditToleranceError("Tolerance must be a number between 0 and 1");
+      toast.error("Tolerance must be a number between 0 and 1");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const updateBody = {
+        parameter_name: editForm.name.trim(),
+        parameter_description: editForm.description.trim(),
+        parameter_tolerance: toleranceValue
+      };
+
+      const response = await ApiClient.post(`/parameters-update?parameter_id=${editingParameterId}`, updateBody);
+      console.log("Update Parameter API Response:", response);
+
+      if (response.data || !response.error) {
+        // Update local state
+        setParameters(parameters.map(param => 
+          param.id === editingParameterId 
+            ? { ...param, name: editForm.name.trim(), description: editForm.description.trim(), tolerance: toleranceValue }
+            : param
+        ));
+        
+        toast.success("Parameter updated successfully!");
+        handleEditParameterCancel();
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to update parameter");
+      }
+    } catch (error) {
+      console.error("Error updating parameter:", error);
+      toast.error("Failed to update parameter");
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
   
   // Toggle parameter selection
@@ -359,14 +557,21 @@ const Home: React.FC = () => {
   // Handle next step in the wizard
   const handleNext = async () => {
     if (step === 0) {
-      // Validate sample conversations
-      const isValid = sampleConversations.every(convo => 
-        convo.messages.every(msg => msg.content.trim().length > 0)
-      );
-      
-      if (!isValid) {
-        alert("Please fill in all conversation messages");
-        return;
+      // Validate based on synthesis method
+      if (synthesisMethod === "manual") {
+        const isValid = sampleConversations.every(convo => 
+          convo.messages.every(msg => msg.content.trim().length > 0)
+        );
+        
+        if (!isValid) {
+          alert("Please fill in all conversation messages");
+          return;
+        }
+      } else if (synthesisMethod === "existing") {
+        if (!selectedExistingDatasetId) {
+          alert("Please select an existing dataset");
+          return;
+        }
       }
 
       setIsGeneratingDataset(true);
@@ -375,21 +580,35 @@ const Home: React.FC = () => {
         // Generate a new dataset ID
         const newDatasetId = uuidv4();
         
-        // Prepare the sample data in the correct format
-        const sampleData = sampleConversations.map(convo => ({
-          id: convo.id,
-          conversation: convo.messages
-        }));
+        let response;
+        
+        if (synthesisMethod === "manual") {
+          // Prepare the sample data in the correct format for manual method
+          const sampleData = sampleConversations.map(convo => ({
+            id: convo.id,
+            conversation: convo.messages
+          }));
 
-        // Call the datasets-generate API
-        const response = await ApiClient.post(
-          `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
-          {
-            sample_data: sampleData,
-            num_samples: numSamples,
-            extra_info: botInstructions
-          }
-        );
+          // Call the datasets-generate API
+          response = await ApiClient.post(
+            `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
+            {
+              sample_data: sampleData,
+              num_samples: numSamples,
+              extra_info: botInstructions,
+              dataset_name: `Quick Start Dataset ${Date.now()}`
+            }
+          );
+        } else {
+          // Call the datasets-extend API for existing dataset method
+          response = await ApiClient.post(
+            `/datasets-extend?dataset_id=${selectedExistingDatasetId}`,
+            {
+              num_samples: numSamples
+              // extra_info: botInstructions,
+            }
+          );
+        }
 
         console.log("Dataset generation response:", response);
 
@@ -418,7 +637,8 @@ const Home: React.FC = () => {
               dataset: generatedConversations.map(convo => ({
                 id: convo.id,
                 conversation: convo.messages
-              }))
+              })),
+              dataset_name: `Quick Start Dataset ${Date.now()}`
             };
 
             console.log("Updating dataset with edited conversations:", datasetData);
@@ -483,7 +703,8 @@ const Home: React.FC = () => {
           experiment_name: `Quick Experiment ${new Date().toLocaleDateString()}`,
           dataset_id: datasetId,
           parameter_ids: selectedParameterIds,
-          labrat_json: labratJson
+          labrat_json: labratJson,
+          workers: workers
         };
         
         console.log("Labrat JSON from project details:", labratJson);
@@ -566,12 +787,15 @@ const Home: React.FC = () => {
             setIsDatasetReady(false);
             setGeneratedConversations([]);
             setNumSamples(10);
+            setSynthesisMethod("manual");
+            setSelectedExistingDatasetId("");
             setSampleConversations([
               { id: "sample-1", messages: [{ role: "user", content: "" }, { role: "assistant", content: "" }] }
             ]);
             setBotInstructions("");
             setParameters([]);
-            setNewParameter({ name: "", description: "" });
+            setNewParameter({ name: "", description: "", tolerance: "0.5" });
+            setToleranceError(""); // Clear any error
             setPriceQuoted(false);
             setEstimatedPrice(null);
           }}
@@ -582,12 +806,107 @@ const Home: React.FC = () => {
 
       {step === 0 && (
         <div className="space-y-6">
-          <p className="text-muted-foreground">
-            Provide sample conversations between a user and your chatbot. These will be used to synthesize a larger dataset for evaluation.
-          </p>
-          
-          <div className="space-y-6">
-            {sampleConversations.map((conversation, i) => (
+          <div className="orygin-card p-6">
+            <Label className="text-base font-medium">Synthesis Method</Label>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choose how you want to create the dataset for evaluation
+            </p>
+            <RadioGroup
+              value={synthesisMethod}
+              onValueChange={(value: "manual" | "existing") => setSynthesisMethod(value)}
+              className="space-y-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="manual" id="manual-home" />
+                <Label htmlFor="manual-home" className="cursor-pointer">
+                  Create from manual sample conversations
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="existing" id="existing-home" />
+                <Label htmlFor="existing-home" className="cursor-pointer">
+                  Extend from existing dataset
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {synthesisMethod === "existing" && (
+            <>
+              <div className="orygin-card p-6">
+                <Label htmlFor="existing-dataset-home">Select Existing Dataset</Label>
+                <Select
+                  value={selectedExistingDatasetId}
+                  onValueChange={setSelectedExistingDatasetId}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={isLoadingDatasets ? "Loading datasets..." : "Select a dataset to extend"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingDatasets.map((dataset) => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        {dataset.name} ({dataset.conversations.length} conversations)
+                      </SelectItem>
+                    ))}
+                    {existingDatasets.length === 0 && !isLoadingDatasets && (
+                      <SelectItem value="no-datasets" disabled>
+                        No datasets available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The selected dataset will be used as a base to generate new conversations
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dataset Extension Settings</CardTitle>
+                  <CardDescription>Configure how many new conversations to generate and provide additional context</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="num-samples-existing">Number of Samples</Label>
+                    <Input
+                      id="num-samples-existing"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={numSamples}
+                      onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
+                      placeholder="Enter number of new conversations to generate"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Specify how many total conversations to generate based on the existing dataset (1-100)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bot-instructions-existing">Additional Information</Label>
+                    <Textarea
+                      id="bot-instructions-existing"
+                      placeholder="e.g., 'Focus on technical questions', 'Include more edge cases', 'Generate conversations about specific topics', etc."
+                      value={botInstructions}
+                      onChange={(e) => setBotInstructions(e.target.value)}
+                      className="min-h-20"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Provide additional context or instructions to guide the generation of new conversations from the existing dataset
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {synthesisMethod === "manual" && (
+            <>
+              <p className="text-muted-foreground">
+                Provide sample conversations between a user and your chatbot. These will be used to synthesize a larger dataset for evaluation.
+              </p>
+              
+              <div className="space-y-6">
+                {sampleConversations.map((conversation, i) => (
               <div key={conversation.id} className="orygin-card p-4 relative">
                 <div className="absolute top-2 right-2">
                   {sampleConversations.length > 1 && (
@@ -677,8 +996,12 @@ const Home: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+          </>
+          )}
         </div>
-      )}      {step === 1 && (
+      )}
+
+      {step === 1 && (
         <div className="space-y-6">
           {!isDatasetReady ? (
             <div className="text-center py-12">
@@ -693,7 +1016,8 @@ const Home: React.FC = () => {
                   <div className="animate-pulse">
                     <div className="h-4 bg-muted rounded w-3/4 mx-auto mb-2"></div>
                     <div className="h-4 bg-muted rounded w-1/2 mx-auto"></div>
-                  </div>                  <Button 
+                  </div>                  
+                  <Button 
                     onClick={checkDatasetStatus}
                     variant="outline"
                     className="mt-4"
@@ -792,6 +1116,24 @@ const Home: React.FC = () => {
                     className="min-h-24"
                   />
                 </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="new-param-tolerance">Tolerance</Label>
+                  <Input
+                    id="new-param-tolerance"
+                    type="text"
+                    value={newParameter.tolerance}
+                    onChange={(e) => handleToleranceChange(e.target.value)}
+                    placeholder="0.5"
+                    className={toleranceError ? "border-red-500" : ""}
+                  />
+                  {toleranceError && (
+                    <p className="text-xs text-red-500">{toleranceError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    How strictly this parameter will be judged (0 = extremely strict, 1 = very lenient)
+                  </p>
+                </div>
               </CardContent>
               <CardFooter>
                 <Button
@@ -827,31 +1169,126 @@ const Home: React.FC = () => {
                 ) : parameters.length > 0 ? (
                   parameters.map((param, i) => (
                     <div key={param.id} className="flex items-start space-x-3 p-3 border border-border rounded-md">
-                      <Checkbox
-                        id={param.id}
-                        checked={param.selected}
-                        onCheckedChange={() => toggleParameter(i)}
-                      />
-                      <div className="flex-1 space-y-1">
-                        <Label
-                          htmlFor={param.id}
-                          className="font-medium cursor-pointer"
-                        >
-                          {param.name}
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          {param.description}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeParameter(i)}
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        <span className="sr-only">Remove parameter</span>
-                      </Button>
+                      {editingParameterId === param.id ? (
+                        // Edit Mode
+                        <div className="flex-1 space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor={`edit-name-${param.id}`}>Parameter Name</Label>
+                            <Input
+                              id={`edit-name-${param.id}`}
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              placeholder="e.g., Response Quality"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`edit-description-${param.id}`}>Description</Label>
+                            <Textarea
+                              id={`edit-description-${param.id}`}
+                              value={editForm.description}
+                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                              placeholder="Describe what this parameter evaluates..."
+                              className="min-h-20"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`edit-tolerance-${param.id}`}>Tolerance</Label>
+                            <Input
+                              id={`edit-tolerance-${param.id}`}
+                              type="text"
+                              value={editForm.tolerance}
+                              onChange={(e) => handleEditParameterToleranceChange(e.target.value)}
+                              placeholder="0.5"
+                              className={editToleranceError ? "border-red-500" : ""}
+                            />
+                            {editToleranceError && (
+                              <p className="text-xs text-red-500">{editToleranceError}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              How strictly this parameter will be judged (0 = extremely strict, 1 = very lenient)
+                            </p>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleEditParameterCancel}
+                              disabled={isSavingEdit}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={saveEditedParameter}
+                              disabled={isSavingEdit || !editForm.name.trim() || !editForm.description.trim()}
+                              className="bg-primary hover:bg-orygin-red-hover text-white"
+                            >
+                              <Save className="h-4 w-4 mr-1" />
+                              {isSavingEdit ? "Saving..." : "Save Changes"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        // View Mode
+                        <>
+                          <Checkbox
+                            id={param.id}
+                            checked={param.selected}
+                            onCheckedChange={() => toggleParameter(i)}
+                          />
+                          <div className="flex-1 space-y-1">
+                            <Label
+                              htmlFor={param.id}
+                              className="font-medium cursor-pointer"
+                            >
+                              {param.name}
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <p className="text-sm text-muted-foreground cursor-help">
+                                    {param.description.length > 100 
+                                      ? `${param.description.substring(0, 100)}...` 
+                                      : param.description}
+                                  </p>
+                                </TooltipTrigger>
+                                {param.description.length > 100 && (
+                                  <TooltipContent className="max-w-md p-3">
+                                    <p className="text-sm">{param.description}</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
+                            <p className="text-xs text-muted-foreground">
+                              Tolerance: {param.tolerance?.toFixed(1) || '0.5'} {param.tolerance !== undefined && (param.tolerance <= 0.3 ? '(Strict)' : param.tolerance >= 0.7 ? '(Lenient)' : '(Moderate)')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditParameterStart(param)}
+                              className="h-6 w-6 text-muted-foreground hover:text-blue-600"
+                            >
+                              <Edit3 className="h-3 w-3" />
+                              <span className="sr-only">Edit parameter</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeParameter(i)}
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span className="sr-only">Remove parameter</span>
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -898,6 +1335,35 @@ const Home: React.FC = () => {
             </Card>
           )} */}
           
+          {/* Estimated Price Section */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Experiment Configuration</CardTitle>
+              <CardDescription>
+                Configure additional settings for your experiment
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workers">Number of Workers (Optional)</Label>
+                  <Input
+                    id="workers"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={workers}
+                    onChange={(e) => setWorkers(parseInt(e.target.value) || 10)}
+                    placeholder="10"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Number of parallel threads to use for running this experiment. Default is 10.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Estimated Price Section */}
           <Card className="mt-6">
             <CardHeader>

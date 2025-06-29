@@ -60,6 +60,13 @@ interface EvalResult {
   evaluations: EvaluationDetail[];
 }
 
+interface ParameterDetails {
+  id: string;
+  name: string;
+  description: string;
+  tolerance: number;
+}
+
 interface OverallEvalResults {
   conversations_tested: number;
   average_response_time: number;
@@ -83,6 +90,7 @@ const Report: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("");
   const [experimentName, setExperimentName] = useState<string>("");
+  const [parameterDetails, setParameterDetails] = useState<ParameterDetails[]>([]);
   useEffect(() => {
     const fetchExperimentDetails = async () => {
       if (!experimentId) {
@@ -124,6 +132,11 @@ const Report: React.FC = () => {
           // Transform API response to ReportData interface
           const transformedData: ReportData = transformApiResponseToReportData(apiData);
           setReportData(transformedData);
+          
+          // Fetch parameter details if parameter_ids are available
+          if (apiData.parameter_ids && Array.isArray(apiData.parameter_ids)) {
+            await fetchParameterDetails(apiData.parameter_ids);
+          }
         } else {
           console.error("API Response structure issue:", {
             hasData: !!response.data,
@@ -144,6 +157,36 @@ const Report: React.FC = () => {
 
     fetchExperimentDetails();
   }, [experimentId, projectId]);
+
+  // Function to fetch parameter details
+  const fetchParameterDetails = async (parameterIds: string[]) => {
+    try {
+      const parameterDetailsPromises = parameterIds.map(async (parameterId) => {
+        try {
+          const response = await ApiClient.get(`/parameters-details?parameter_id=${parameterId}`);
+          if (response.data && (response.data as any).parameter) {
+            const param = (response.data as any).parameter;
+            return {
+              id: param.parameter_id || parameterId,
+              name: param.name || 'Unknown Parameter',
+              description: param.description || '',
+              tolerance: param.tolerance || param.parameter_tolerance || 0.5
+            };
+          }
+          return null;
+        } catch (error) {
+          console.warn(`Failed to fetch parameter details for ${parameterId}:`, error);
+          return null;
+        }
+      });
+
+      const parameterDetailsResults = await Promise.all(parameterDetailsPromises);
+      const validParameterDetails = parameterDetailsResults.filter((param): param is ParameterDetails => param !== null);
+      setParameterDetails(validParameterDetails);
+    } catch (error) {
+      console.error("Error fetching parameter details:", error);
+    }
+  };
 
   // Helper function to transform API response to ReportData interface
   const transformApiResponseToReportData = (apiData: any): ReportData => {
@@ -276,10 +319,13 @@ const Report: React.FC = () => {
       name: string;
       value: string;
       note: string;
+      tolerance?: number;
       grade: string;
       gradeColor: string;
       IconComponent: any;
-    }> = [];    // Get unique parameter names from eval results (excluding Semantic Similarity)
+    }> = [];
+
+    // Get unique parameter names from eval results (excluding Semantic Similarity)
     const uniqueParams = new Set<string>();
     reportData.eval_results.forEach(result => {
       result.evaluations.forEach(evaluation => {
@@ -296,17 +342,24 @@ const Report: React.FC = () => {
         .flatMap(result => result.evaluations)
         .filter(evaluation => evaluation.name === paramName)
         .map(evaluation => evaluation.score);
-        const avgScore = scores.length > 0 
+        
+      const avgScore = scores.length > 0 
         ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
         : 0;
 
       const grade = getGrade(avgScore, paramName);
       const IconComponent = getParameterIcon(paramName);
+      
+      // Find tolerance for this parameter
+      const parameterDetail = parameterDetails.find(param => 
+        param.name.toLowerCase() === paramName.toLowerCase()
+      );
 
       parameters.push({
         name: paramName,
         value: avgScore.toFixed(2),
         note: getParameterNote(paramName),
+        tolerance: parameterDetail?.tolerance,
         grade: grade.grade,
         gradeColor: grade.color === "text-green-500" ? "bg-green-100 text-green-800" :
                    grade.color === "text-blue-500" ? "bg-blue-100 text-blue-800" :
@@ -445,6 +498,7 @@ const Report: React.FC = () => {
 
     // Calculate average scores for all parameters dynamically
     const parameterScores: { [key: string]: number } = {};
+    const parameterTolerances: { [key: string]: number } = {};
     uniqueParams.forEach(paramName => {
       const scores = reportData.eval_results
         .flatMap(result => result.evaluations)
@@ -458,6 +512,14 @@ const Report: React.FC = () => {
       // Convert parameter name to snake_case for consistency
       const paramKey = paramName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
       parameterScores[paramKey] = avgScore;
+      
+      // Find tolerance for this parameter
+      const parameterDetail = parameterDetails.find(param => 
+        param.name.toLowerCase() === paramName.toLowerCase()
+      );
+      if (parameterDetail?.tolerance !== undefined) {
+        parameterTolerances[paramKey] = parameterDetail.tolerance;
+      }
     });
 
     // Create the new JSON structure according to requirements
@@ -475,6 +537,9 @@ const Report: React.FC = () => {
         
         // Dynamic parameter scores for all parameters
         parameter_scores: parameterScores,
+        
+        // Parameter tolerances
+        parameter_tolerances: parameterTolerances,
         
         // Then insights
         insights: reportData.insights,
@@ -539,7 +604,14 @@ const Report: React.FC = () => {
         : 0;
       
       const grade = getGrade(avgScore, paramName);
-      summaryData.push([paramName, avgScore.toFixed(2), grade.grade]);
+      
+      // Find tolerance for this parameter
+      const parameterDetail = parameterDetails.find(param => 
+        param.name.toLowerCase() === paramName.toLowerCase()
+      );
+      const tolerance = parameterDetail?.tolerance?.toFixed(2) || 'N/A';
+      
+      summaryData.push([paramName, avgScore.toFixed(2), grade.grade, `Tolerance: ${tolerance}`]);
     });
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -548,7 +620,8 @@ const Report: React.FC = () => {
     summarySheet['!cols'] = [
       { width: 25 },
       { width: 20 },
-      { width: 10 }
+      { width: 10 },
+      { width: 15 }
     ];    // Sheet 2: Conversation Details
     const conversationHeaders = ['Conversation ID', 'Response Time (s)'];
     const allParams = Array.from(uniqueParams);
@@ -803,6 +876,20 @@ const Report: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-foreground">{param.value}</div>
+                  {param.tolerance !== undefined && (
+                    <div className="flex items-center justify-between pt-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="text-xs text-muted-foreground cursor-help">
+                            Tolerance: {param.tolerance.toFixed(2)}
+                          </p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Acceptable deviation threshold for this parameter</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between pt-1">
                     <p className="text-xs text-muted-foreground">{param.note}</p>
                     <span className={`text-xs font-semibold px-2 py-1 rounded ${param.gradeColor}`}>
@@ -813,6 +900,46 @@ const Report: React.FC = () => {
               </Card>
             ))}
           </div>
+          
+          {/* Grades Definition Card */}
+          <Card className="bg-muted/50 border-dashed">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                Grade Definitions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded font-semibold">A</span>
+                  <span className="text-muted-foreground">Excellent (90-100%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-semibold">B</span>
+                  <span className="text-muted-foreground">Good (80-89%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-semibold">C</span>
+                  <span className="text-muted-foreground">Average (70-79%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded font-semibold">D</span>
+                  <span className="text-muted-foreground">Below Average (60-69%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">F</span>
+                  <span className="text-muted-foreground">Poor ({`<60%`})</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3 italic">
+                * For parameters where lower scores are better (e.g., Toxicity, Hallucination), grades are inverted to reflect performance quality.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2 italic">
+                * Tolerance values represent acceptable deviation thresholds defined for each parameter during experiment setup.
+              </p>
+            </CardContent>
+          </Card>
         </div>        {/* Overall Metrics Cards */}
         <div className="grid gap-4 md:grid-cols-3">
           {overallMetricsCardsData.map((metric, index) => (
@@ -960,11 +1087,31 @@ const Report: React.FC = () => {
                       <TableRow>
                         <TableHead className="w-[100px]">Convo ID</TableHead>
                         <TableHead className="text-center">Resp. Time (s)</TableHead>
-                        {getParametersForTable(reportData).map((paramName) => (
-                          <TableHead key={paramName} className="text-center min-w-[120px]">
-                            {getAbbreviatedParamName(paramName)}
-                          </TableHead>
-                        ))}
+                        {getParametersForTable(reportData).map((paramName) => {
+                          const parameterDetail = parameterDetails.find(param => 
+                            param.name.toLowerCase() === paramName.toLowerCase()
+                          );
+                          
+                          return (
+                            <TableHead key={paramName} className="text-center min-w-[120px]">
+                              <div className="flex flex-col items-center">
+                                <span>{getAbbreviatedParamName(paramName)}</span>
+                                {parameterDetail?.tolerance !== undefined && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-xs text-muted-foreground cursor-help">
+                                        (Tol: {parameterDetail.tolerance.toFixed(2)})
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Tolerance threshold: {parameterDetail.tolerance.toFixed(2)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableHead>
+                          );
+                        })}
                         <TableHead className="text-right w-[100px]">Details</TableHead>
                       </TableRow>
                     </TableHeader>

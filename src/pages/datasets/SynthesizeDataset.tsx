@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiClient } from "@/lib/api-client";
 import { v4 as uuidv4 } from 'uuid';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 // Types for the dataset
 interface Message {
@@ -20,6 +22,15 @@ interface Message {
 interface Conversation {
   id: string;
   messages: Message[];
+}
+
+// Dataset interface for existing datasets selection
+interface Dataset {
+  id: string;
+  name: string;
+  project_id: string;
+  created_at: string;
+  conversations: Conversation[];
 }
 
 const SynthesizeDataset: React.FC = () => {
@@ -34,6 +45,13 @@ const SynthesizeDataset: React.FC = () => {
   const [generatedConversations, setGeneratedConversations] = useState<Conversation[]>([]);  
   const [extraInfo, setExtraInfo] = useState("");
   const [numSamples, setNumSamples] = useState(10);
+  
+  // New states for dataset selection
+  const [synthesisMethod, setSynthesisMethod] = useState<"manual" | "existing">("manual");
+  const [existingDatasets, setExistingDatasets] = useState<Dataset[]>([]);
+  const [selectedExistingDatasetId, setSelectedExistingDatasetId] = useState<string>("");
+  const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
+  
   const [sampleConversations, setSampleConversations] = useState<Conversation[]>([
     { 
       id: `sample-${Date.now()}`, 
@@ -46,6 +64,46 @@ const SynthesizeDataset: React.FC = () => {
 
   const startCreation = () => {
     setShowForm(true);
+    // Fetch existing datasets when showing the form
+    fetchExistingDatasets();
+  };
+
+  // Fetch existing datasets for selection
+  const fetchExistingDatasets = async () => {
+    setIsLoadingDatasets(true);
+    try {
+      const response = await ApiClient.get('/datasets-list', { project_id: projectId });
+      console.log("Datasets API Response:", response);
+      
+      const responseData = response.data as { status?: string; datasets?: any[] };
+      
+      if (responseData && responseData.datasets && Array.isArray(responseData.datasets)) {
+        const transformedDatasets: Dataset[] = responseData.datasets.map((dataset: any) => ({
+          id: dataset.dataset_id,
+          name: dataset.dataset_name || `Dataset ${dataset.dataset_id.slice(0, 8)}...`,
+          project_id: projectId || "",
+          created_at: dataset.created_at,
+          conversations: (dataset.dataset_json || []).map((conv: any) => ({
+            id: conv.id,
+            messages: (conv.conversation || []).map((msg: any) => ({
+              role: msg.role,
+              content: msg.content
+            }))
+          }))
+        }));
+        
+        setExistingDatasets(transformedDatasets);
+      } else {
+        console.warn("Unexpected API response structure:", response);
+        setExistingDatasets([]);
+      }
+    } catch (error) {
+      console.error("Error fetching existing datasets:", error);
+      toast.error("Failed to fetch existing datasets");
+      setExistingDatasets([]);
+    } finally {
+      setIsLoadingDatasets(false);
+    }
   };
 
   // Add a new conversation sample
@@ -163,7 +221,8 @@ const SynthesizeDataset: React.FC = () => {
         dataset: generatedConversations.map(convo => ({
           id: convo.id,
           conversation: convo.messages
-        }))
+        })),
+        dataset_name: datasetName
       };
 
       console.log("Updating dataset with edited conversations:", datasetData);
@@ -219,7 +278,7 @@ const SynthesizeDataset: React.FC = () => {
       //     conversation: convo.messages
       //   })),
       //   project_id: projectId,
-      //   name: datasetName
+      //   dataset_name: datasetName
       // };
 
       // const response = await ApiClient.post(`/datasets-create?dataset_id=${datasetId}`, datasetData);
@@ -237,7 +296,7 @@ const SynthesizeDataset: React.FC = () => {
     // } finally {
     //   setIsLoading(false);
     }
-  };// Handle form submission
+  };  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -247,13 +306,21 @@ const SynthesizeDataset: React.FC = () => {
       return;
     }
     
-    const invalidConversation = sampleConversations.find(convo => 
-      convo.messages.some(msg => !msg.content.trim())
-    );
-    
-    if (invalidConversation) {
-      toast.error("Please fill in all conversation messages");
-      return;
+    // Validate based on synthesis method
+    if (synthesisMethod === "manual") {
+      const invalidConversation = sampleConversations.find(convo => 
+        convo.messages.some(msg => !msg.content.trim())
+      );
+      
+      if (invalidConversation) {
+        toast.error("Please fill in all conversation messages");
+        return;
+      }
+    } else if (synthesisMethod === "existing") {
+      if (!selectedExistingDatasetId) {
+        toast.error("Please select an existing dataset");
+        return;
+      }
     }
     
     setIsLoading(true);
@@ -262,21 +329,38 @@ const SynthesizeDataset: React.FC = () => {
       // Generate a new dataset ID
       const newDatasetId = uuidv4();
       
-      // Prepare the sample data in the correct format
-      const sampleData = sampleConversations.map(convo => ({
-        id: convo.id,
-        conversation: convo.messages
-      }));
+      let response;
+      
+      if (synthesisMethod === "manual") {
+        // Prepare the sample data in the correct format for manual method
+        const sampleData = sampleConversations.map(convo => ({
+          id: convo.id,
+          conversation: convo.messages
+        }));
 
-      // Call the datasets-generate API
-      const response = await ApiClient.post(
-        `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
-        {
-          sample_data: sampleData,
-          num_samples: numSamples,
-          extra_info: extraInfo
-        }
-      );
+        // Call the datasets-generate API
+        response = await ApiClient.post(
+          `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
+          {
+            sample_data: sampleData,
+            num_samples: numSamples,
+            extra_info: extraInfo,
+            dataset_name: datasetName
+          }
+        );
+      } else {
+        // Call the datasets-extend API for existing dataset method
+        response = await ApiClient.post(
+          `/datasets-extend?dataset_id=${selectedExistingDatasetId}`,
+          {
+            num_samples: numSamples,
+            extra_info: extraInfo,
+            dataset_name: datasetName,
+            new_dataset_id: newDatasetId,
+            project_id: projectId
+          }
+        );
+      }
 
       console.log("Dataset generation response:", response);
 
@@ -353,6 +437,8 @@ const SynthesizeDataset: React.FC = () => {
             setDatasetName("");
             setExtraInfo("");
             setNumSamples(10);
+            setSynthesisMethod("manual");
+            setSelectedExistingDatasetId("");
             setSampleConversations([
               { 
                 id: `sample-${Date.now()}`, 
@@ -380,13 +466,107 @@ const SynthesizeDataset: React.FC = () => {
               className="mt-1"
             />
           </div>
+
+          <div className="orygin-card p-6">
+            <Label className="text-base font-medium">Synthesis Method</Label>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choose how you want to create the new dataset
+            </p>
+            <RadioGroup
+              value={synthesisMethod}
+              onValueChange={(value: "manual" | "existing") => setSynthesisMethod(value)}
+              className="space-y-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="manual" id="manual" />
+                <Label htmlFor="manual" className="cursor-pointer">
+                  Create from manual sample conversations
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="existing" id="existing" />
+                <Label htmlFor="existing" className="cursor-pointer">
+                  Extend from existing dataset
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {synthesisMethod === "existing" && (
+            <>
+              <div className="orygin-card p-6">
+                <Label htmlFor="existing-dataset">Select Existing Dataset</Label>
+                <Select
+                  value={selectedExistingDatasetId}
+                  onValueChange={setSelectedExistingDatasetId}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={isLoadingDatasets ? "Loading datasets..." : "Select a dataset to extend"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingDatasets.map((dataset) => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        {dataset.name} ({dataset.conversations.length} conversations)
+                      </SelectItem>
+                    ))}
+                    {existingDatasets.length === 0 && !isLoadingDatasets && (
+                      <SelectItem value="no-datasets" disabled>
+                        No datasets available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The selected dataset will be used as a base to generate new conversations
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dataset Extension Settings</CardTitle>
+                  <CardDescription>Configure how many new conversations to generate and provide additional context</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="num-samples-existing">Number of New Samples</Label>
+                    <Input
+                      id="num-samples-existing"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={numSamples}
+                      onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
+                      placeholder="Enter number of new conversations to generate"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Specify how many new conversations to generate based on the existing dataset (1-100)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="extra-info-existing">Additional Information</Label>
+                    <Textarea
+                      id="extra-info-existing"
+                      value={extraInfo}
+                      onChange={(e) => setExtraInfo(e.target.value)}
+                      placeholder="e.g., 'Focus on technical questions', 'Include more edge cases', 'Generate conversations about specific topics', etc."
+                      className="min-h-20"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Provide additional context or instructions to guide the generation of new conversations from the existing dataset
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
           
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Sample Conversations</h3>
-            </div>
-            
-            {sampleConversations.map((conversation, i) => (
+          {synthesisMethod === "manual" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">Sample Conversations</h3>
+              </div>
+              
+              {sampleConversations.map((conversation, i) => (
               <div key={conversation.id} className="orygin-card p-6 relative">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-medium">Conversation {i + 1}</h4>
@@ -453,36 +633,48 @@ const SynthesizeDataset: React.FC = () => {
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Another Conversation
-            </Button>          
-          </div>
+            </Button>
 
-          <div className="orygin-card p-6">
-            <Label htmlFor="num-samples">Number of Samples</Label>
-            <Input
-              id="num-samples"
-              type="number"
-              min="1"
-              max="100"
-              value={numSamples}
-              onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
-              placeholder="Enter number of conversations to generate"
-              className="mt-1"
-            />
-            <p className="text-sm text-muted-foreground mt-1">
-              Specify how many conversations to generate (1-100)
-            </p>
-          </div>
-
-          <div className="orygin-card p-6">
-            <Label htmlFor="extra-info">Additional Instructions</Label>
-            <Textarea
-              id="extra-info"
-              value={extraInfo}
-              onChange={(e) => setExtraInfo(e.target.value)}
-              placeholder="Provide any additional context or instructions for generating conversations..."
-              className="mt-1 min-h-20"
-            />
-          </div>
+            <Card className="mt-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-md">Dataset Configuration</CardTitle>
+                <CardDescription>
+                  Configure the dataset generation settings
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="num-samples-manual">Number of Samples</Label>
+                  <Input
+                    id="num-samples-manual"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={numSamples}
+                    onChange={(e) => setNumSamples(parseInt(e.target.value) || 1)}
+                    placeholder="Enter number of conversations to generate"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Specify how many conversations to generate (1-100)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="extra-info-manual">Additional Instructions</Label>
+                  <Textarea
+                    id="extra-info-manual"
+                    value={extraInfo}
+                    onChange={(e) => setExtraInfo(e.target.value)}
+                    placeholder="e.g., 'The bot is supposed to answer in short paragraphs', 'The bot should provide code examples', etc."
+                    className="min-h-20"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Provide information about how the bot should respond to help synthesize relevant conversations
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            </div>
+          )}
           
           <div className="flex justify-end space-x-4">
             <Button 

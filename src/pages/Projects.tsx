@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, MoreVertical, ExternalLink, Trash2 } from 'lucide-react';
+import { Plus, MoreVertical, ExternalLink, Trash2, Edit3 } from 'lucide-react';
 import { useProject } from '@/contexts/ProjectContext';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
+import { ApiClient } from '@/lib/api-client';
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,16 @@ const Projects: React.FC = () => {
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+
+  // Update project states
+  const [editProject, setEditProject] = useState({
+    id: '',
+    name: '',
+    endpoint: '',
+    headers: '',
+  });
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isSubmittingUpdate, setIsSubmittingUpdate] = useState(false);
 
   useEffect(() => {
     console.log('Projects.tsx useEffect - Auth state:', { isAuthenticated, user: user?.id, authLoading });
@@ -124,6 +135,95 @@ const Projects: React.FC = () => {
       } catch (error) {
         console.error('Failed to delete project:', error);
       }
+    }
+  };
+
+  // Handle edit project click
+  const handleEditClick = async (projectId: string) => {
+    try {
+      // Fetch project details
+      const response = await ApiClient.get(`/projects-details?project_id=${projectId}`);
+      console.log("Project details response:", response);
+      
+      if (response.data && (response.data as any).project) {
+        const projectData = (response.data as any).project;
+        setEditProject({
+          id: projectId,
+          name: projectData.project_name || '',
+          endpoint: projectData.labrat_json?.endpoint || '',
+          headers: JSON.stringify(projectData.labrat_json?.headers || {}, null, 2),
+        });
+        setIsEditDialogOpen(true);
+      } else {
+        toast.error('Failed to fetch project details');
+      }
+    } catch (error) {
+      console.error('Error fetching project details:', error);
+      toast.error('Failed to fetch project details');
+    }
+  };
+
+  // Handle update project
+  const handleUpdateProject = async () => {
+    const projectName = editProject.name.trim();
+    const endpoint = editProject.endpoint.trim();
+
+    if (!projectName || !endpoint) {
+      toast.error('Project name and API endpoint are required.');
+      return;
+    }
+
+    // Parse headers if provided
+    let headersObject = {};
+    if (editProject.headers.trim()) {
+      try {
+        headersObject = JSON.parse(editProject.headers.trim());
+      } catch (error) {
+        toast.error('Invalid JSON format for headers. Please provide valid JSON or leave empty.');
+        return;
+      }
+    }
+
+    setIsSubmittingUpdate(true);
+    try {
+      // First, fetch the current project details to get existing IDs
+      const detailsResponse = await ApiClient.get(`/projects-details?project_id=${editProject.id}`);
+      
+      if (!detailsResponse.data || !(detailsResponse.data as any).project) {
+        throw new Error('Failed to fetch current project details');
+      }
+
+      const currentProject = (detailsResponse.data as any).project;
+      
+      // Prepare update payload with all required fields
+      const updatePayload = {
+        project_name: projectName,
+        labrat: {
+          endpoint: endpoint,
+          headers: headersObject
+        },
+        dataset_ids: currentProject.dataset_ids || [],
+        parameter_ids: currentProject.parameter_ids || [],
+        experiment_ids: currentProject.experiment_ids || []
+      };
+
+      console.log("Updating project with payload:", updatePayload);
+      
+      const response = await ApiClient.post(`/projects-update?project_id=${editProject.id}`, updatePayload);
+      
+      if (response.data || !response.error) {
+        toast.success('Project updated successfully!');
+        setIsEditDialogOpen(false);
+        setEditProject({ id: '', name: '', endpoint: '', headers: '' });
+        await fetchProjects(); // Refresh the projects list
+      } else {
+        throw new Error((response.error as any)?.message || 'Failed to update project');
+      }
+    } catch (error) {
+      console.error('Failed to update project:', error);
+      toast.error('Failed to update project. Please try again.');
+    } finally {
+      setIsSubmittingUpdate(false);
     }
   };
 
@@ -251,6 +351,12 @@ const Projects: React.FC = () => {
                       </Button>
                     </DropdownMenuTrigger>                    <DropdownMenuContent align="end">
                       <DropdownMenuItem
+                        onClick={() => handleEditClick(project.id)}
+                      >
+                        <Edit3 className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => handleDeleteClick(project.id)}
                       >
@@ -322,6 +428,86 @@ const Projects: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update your project settings
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Project Name</Label>
+              <Input
+                id="edit-name"
+                placeholder="My Awesome Model"
+                value={editProject.name}
+                onChange={e =>
+                  setEditProject({ ...editProject, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-endpoint">API Endpoint</Label>
+              <Input
+                id="edit-endpoint"
+                placeholder="https://api.example.com/v1/chat/completions"
+                value={editProject.endpoint}
+                onChange={e =>
+                  setEditProject({
+                    ...editProject,
+                    endpoint: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-headers">Headers (Optional)</Label>
+              <Textarea
+                id="edit-headers"
+                placeholder='{"Authorization": "Bearer your-token", "Content-Type": "application/json"}'
+                value={editProject.headers}
+                onChange={e =>
+                  setEditProject({
+                    ...editProject,
+                    headers: e.target.value,
+                  })
+                }
+                className="min-h-[80px]"
+              />
+              <p className="text-sm text-muted-foreground">
+                Enter headers as JSON format. Leave empty if no custom headers needed.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                setEditProject({ id: '', name: '', endpoint: '', headers: '' });
+              }}
+              disabled={isSubmittingUpdate}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateProject}
+              disabled={
+                !editProject.name.trim() ||
+                !editProject.endpoint.trim() ||
+                isSubmittingUpdate
+              }
+              className="bg-primary hover:bg-orygin-red-hover text-white"
+            >
+              {isSubmittingUpdate ? 'Updating...' : 'Update Project'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

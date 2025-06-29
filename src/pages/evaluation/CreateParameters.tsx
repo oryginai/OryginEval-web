@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { Plus, Trash2, Info } from "lucide-react";
+import { Plus, Trash2, Info, Edit3, Save, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -43,10 +42,21 @@ const CreateParameters: React.FC = () => {
   const [existingParameters, setExistingParameters] = useState<Parameter[]>([]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [parameterToDelete, setParameterToDelete] = useState<{ id: string; name: string; type: 'existing' | 'new' } | null>(null);
+  // Edit functionality states
+  const [editingParameter, setEditingParameter] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    tolerance: "0.5"
+  });
+  const [editToleranceError, setEditToleranceError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [newParameter, setNewParameter] = useState({
     name: "",
     description: "",
+    tolerance: "0.5", // Store as string to allow free typing
   });
+  const [toleranceError, setToleranceError] = useState("");
   useEffect(() => {    const fetchExistingParameters = async () => {
       try {
         const response = await ApiClient.get(`/parameters-list?project_id=${projectId}`);
@@ -57,6 +67,7 @@ const CreateParameters: React.FC = () => {
             id: param.parameter_id,
             name: param.name,
             description: param.description,
+            tolerance: param.tolerance || 0.5, // API returns 'tolerance' in response
             created_at: param.created_at,
             project_id: projectId || ""
           }));
@@ -81,6 +92,25 @@ const CreateParameters: React.FC = () => {
     }
   }, [projectId]);
 
+  // Real-time tolerance validation
+  const handleToleranceChange = (value: string) => {
+    setNewParameter({ ...newParameter, tolerance: value });
+    
+    if (value.trim() === "") {
+      setToleranceError("");
+      return;
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setToleranceError("Must be a valid number");
+    } else if (num < 0 || num > 1) {
+      setToleranceError("Must be between 0 and 1");
+    } else {
+      setToleranceError("");
+    }
+  };
+
   // Add a new parameter to the list
   const addParameter = () => {
     if (!newParameter.name.trim() || !newParameter.description.trim()) {
@@ -88,9 +118,19 @@ const CreateParameters: React.FC = () => {
       return;
     }
 
+    // Validate tolerance
+    const toleranceValue = parseFloat(newParameter.tolerance);
+    if (isNaN(toleranceValue) || toleranceValue < 0 || toleranceValue > 1) {
+      setToleranceError("Tolerance must be a number between 0 and 1");
+      toast.error("Tolerance must be a number between 0 and 1");
+      return;
+    }
+    setToleranceError(""); // Clear any previous error
+
     const parameterBody = {
       parameter_name: newParameter.name,
       parameter_description: newParameter.description,
+      parameter_tolerance: toleranceValue,
     };
     const parameterId = uuidv4();
     const response = ApiClient.post(`/parameters-create?project_id=${projectId}&parameter_id=${parameterId}`, parameterBody)
@@ -101,6 +141,7 @@ const CreateParameters: React.FC = () => {
         id: parameterId,
         name: newParameter.name,
         description: newParameter.description,
+        tolerance: toleranceValue, // Add tolerance to the parameter object
         created_at: new Date().toISOString(),
         project_id: projectId || "",
       }]);
@@ -117,7 +158,9 @@ const CreateParameters: React.FC = () => {
     //   },
     // ]);
     
-    setNewParameter({ name: "", description: "" });  };
+    setNewParameter({ name: "", description: "", tolerance: "0.5" });
+    setToleranceError(""); // Clear any error
+  };
 
   // Handle delete parameter click - open confirmation dialog
   const handleDeleteClick = (id: string, name: string, type: 'existing' | 'new') => {
@@ -157,11 +200,90 @@ const CreateParameters: React.FC = () => {
     setParameterToDelete(null);
   };
 
-  // Remove a parameter from the list (legacy function - now using delete confirmation)
-  const removeParameter = (id: string) => {
-    const param = parameters.find(p => p.id === id);
-    if (param) {
-      handleDeleteClick(id, param.name, 'new');
+  // Handle edit parameter
+  const handleEditStart = (param: Parameter) => {
+    setEditingParameter(param.id);
+    setEditForm({
+      name: param.name,
+      description: param.description,
+      tolerance: (param.tolerance || 0.5).toString()
+    });
+    setEditToleranceError("");
+  };
+
+  // Handle cancel edit
+  const handleEditCancel = () => {
+    setEditingParameter(null);
+    setEditForm({ name: "", description: "", tolerance: "0.5" });
+    setEditToleranceError("");
+  };
+
+  // Handle edit tolerance change
+  const handleEditToleranceChange = (value: string) => {
+    setEditForm({ ...editForm, tolerance: value });
+    
+    if (value.trim() === "") {
+      setEditToleranceError("");
+      return;
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      setEditToleranceError("Must be a valid number");
+    } else if (num < 0 || num > 1) {
+      setEditToleranceError("Must be between 0 and 1");
+    } else {
+      setEditToleranceError("");
+    }
+  };
+
+  // Save edited parameter
+  const saveEditedParameter = async () => {
+    if (!editingParameter) return;
+
+    if (!editForm.name.trim() || !editForm.description.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    // Validate tolerance
+    const toleranceValue = parseFloat(editForm.tolerance);
+    if (isNaN(toleranceValue) || toleranceValue < 0 || toleranceValue > 1) {
+      setEditToleranceError("Tolerance must be a number between 0 and 1");
+      toast.error("Tolerance must be a number between 0 and 1");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updateBody = {
+        parameter_name: editForm.name.trim(),
+        parameter_description: editForm.description.trim(),
+        parameter_tolerance: toleranceValue
+      };
+
+      const response = await ApiClient.post(`/parameters-update?parameter_id=${editingParameter}`, updateBody);
+      console.log("Update Parameter API Response:", response);
+
+      if (response.data || !response.error) {
+        // Update local state
+        setExistingParameters(existingParameters.map(param => 
+          param.id === editingParameter 
+            ? { ...param, name: editForm.name.trim(), description: editForm.description.trim(), tolerance: toleranceValue }
+            : param
+        ));
+        
+        toast.success("Parameter updated successfully!");
+        handleEditCancel();
+      } else {
+        console.error("API Error:", response.error);
+        toast.error("Failed to update parameter");
+      }
+    } catch (error) {
+      console.error("Error updating parameter:", error);
+      toast.error("Failed to update parameter");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -204,6 +326,24 @@ const CreateParameters: React.FC = () => {
                   className="min-h-24"
                 />
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="param-tolerance">Tolerance</Label>
+                <Input
+                  id="param-tolerance"
+                  type="text"
+                  value={newParameter.tolerance}
+                  onChange={(e) => handleToleranceChange(e.target.value)}
+                  placeholder="0.5"
+                  className={toleranceError ? "border-red-500" : ""}
+                />
+                {toleranceError && (
+                  <p className="text-xs text-red-500">{toleranceError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  How strictly this parameter will be judged (0 = extremely strict, 1 = very lenient)
+                </p>
+              </div>
             </CardContent>
             <CardFooter>
               <Button
@@ -227,24 +367,116 @@ const CreateParameters: React.FC = () => {
             </CardHeader>            <CardContent className="max-h-80 overflow-y-auto space-y-4">
               {existingParameters.map((param) => (
                 <div key={param.id} className="p-3 border border-border rounded-md">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-medium">{param.name}</h4>
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                        {param.description}
-                      </p>
-                    </div>                    <div className="flex items-center gap-1 ml-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteClick(param.id, param.name, 'existing')}
-                        className="h-5 w-5 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        <span className="sr-only">Delete parameter</span>
-                      </Button>
+                  {editingParameter === param.id ? (
+                    // Edit Mode
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-name-${param.id}`}>Parameter Name</Label>
+                        <Input
+                          id={`edit-name-${param.id}`}
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          placeholder="e.g., Response Quality"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-description-${param.id}`}>Description</Label>
+                        <Textarea
+                          id={`edit-description-${param.id}`}
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          placeholder="Describe what this parameter evaluates..."
+                          className="min-h-20"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-tolerance-${param.id}`}>Tolerance</Label>
+                        <Input
+                          id={`edit-tolerance-${param.id}`}
+                          type="text"
+                          value={editForm.tolerance}
+                          onChange={(e) => handleEditToleranceChange(e.target.value)}
+                          placeholder="0.5"
+                          className={editToleranceError ? "border-red-500" : ""}
+                        />
+                        {editToleranceError && (
+                          <p className="text-xs text-red-500">{editToleranceError}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          How strictly this parameter will be judged (0 = extremely strict, 1 = very lenient)
+                        </p>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleEditCancel}
+                          disabled={isSaving}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={saveEditedParameter}
+                          disabled={isSaving || !editForm.name.trim() || !editForm.description.trim()}
+                          className="bg-primary hover:bg-orygin-red-hover text-white"
+                        >
+                          <Save className="h-4 w-4 mr-1" />
+                          {isSaving ? "Saving..." : "Save Changes"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    // View Mode
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{param.name}</h4>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2 cursor-help">
+                                {param.description.length > 100 
+                                  ? `${param.description.substring(0, 100)}...` 
+                                  : param.description}
+                              </p>
+                            </TooltipTrigger>
+                            {param.description.length > 100 && (
+                              <TooltipContent className="max-w-md p-3">
+                                <p className="text-sm">{param.description}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Tolerance: {param.tolerance?.toFixed(1) || '0.5'} {param.tolerance !== undefined && (param.tolerance <= 0.3 ? '(Strict)' : param.tolerance >= 0.7 ? '(Lenient)' : '(Moderate)')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditStart(param)}
+                          className="h-5 w-5 text-muted-foreground hover:text-blue-600"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                          <span className="sr-only">Edit parameter</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteClick(param.id, param.name, 'existing')}
+                          className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span className="sr-only">Delete parameter</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </CardContent>
@@ -265,14 +497,30 @@ const CreateParameters: React.FC = () => {
                 <div key={param.id} className="p-4 border border-border rounded-md flex justify-between items-start">
                   <div className="space-y-1">
                     <h4 className="font-medium">{param.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {param.description}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="text-sm text-muted-foreground cursor-help">
+                            {param.description.length > 100 
+                              ? `${param.description.substring(0, 100)}...` 
+                              : param.description}
+                          </p>
+                        </TooltipTrigger>
+                        {param.description.length > 100 && (
+                          <TooltipContent className="max-w-md p-3">
+                            <p className="text-sm">{param.description}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                    <p className="text-xs text-muted-foreground">
+                      Tolerance: {param.tolerance?.toFixed(1) || '0.5'} {param.tolerance !== undefined && (param.tolerance <= 0.3 ? '(Strict)' : param.tolerance >= 0.7 ? '(Lenient)' : '(Moderate)')}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => removeParameter(param.id)}
+                    onClick={() => handleDeleteClick(param.id, param.name, 'new')}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />

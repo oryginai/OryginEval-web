@@ -25,6 +25,7 @@ export interface Parameter {
   id: string;
   name: string;
   description: string;
+  tolerance?: number; // Range 0-1, where 0 is extremely strict and 1 is lenient
   project_id: string;
   created_at: string;
 }
