@@ -604,8 +604,10 @@ const Home: React.FC = () => {
           response = await ApiClient.post(
             `/datasets-extend?dataset_id=${selectedExistingDatasetId}`,
             {
-              num_samples: numSamples
-              // extra_info: botInstructions,
+              num_samples: numSamples,
+              project_id: projectId,
+              extra_info: botInstructions,
+              dataset_id_new: uuidv4()
             }
           );
         }

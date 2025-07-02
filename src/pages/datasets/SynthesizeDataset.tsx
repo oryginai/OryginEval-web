@@ -355,9 +355,8 @@ const SynthesizeDataset: React.FC = () => {
           {
             num_samples: numSamples,
             extra_info: extraInfo,
-            dataset_name: datasetName,
-            new_dataset_id: newDatasetId,
-            project_id: projectId
+            project_id: projectId,
+            dataset_id_new: uuidv4()
           }
         );
       }
