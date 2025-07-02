@@ -326,12 +326,13 @@ const SynthesizeDataset: React.FC = () => {
     setIsLoading(true);
     
     try {
-      // Generate a new dataset ID
-      const newDatasetId = uuidv4();
-      
+      // Generate the dataset ID that will be used for the new dataset
+      let actualDatasetId: string;
       let response;
       
       if (synthesisMethod === "manual") {
+        actualDatasetId = uuidv4();
+        
         // Prepare the sample data in the correct format for manual method
         const sampleData = sampleConversations.map(convo => ({
           id: convo.id,
@@ -340,7 +341,7 @@ const SynthesizeDataset: React.FC = () => {
 
         // Call the datasets-generate API
         response = await ApiClient.post(
-          `/datasets-generate?dataset_id=${newDatasetId}&project_id=${projectId}`,
+          `/datasets-generate?dataset_id=${actualDatasetId}&project_id=${projectId}`,
           {
             sample_data: sampleData,
             num_samples: numSamples,
@@ -349,6 +350,9 @@ const SynthesizeDataset: React.FC = () => {
           }
         );
       } else {
+        // For extend method, generate the new dataset ID that will be used
+        actualDatasetId = uuidv4();
+        
         // Call the datasets-extend API for existing dataset method
         response = await ApiClient.post(
           `/datasets-extend?dataset_id=${selectedExistingDatasetId}`,
@@ -356,7 +360,7 @@ const SynthesizeDataset: React.FC = () => {
             num_samples: numSamples,
             extra_info: extraInfo,
             project_id: projectId,
-            dataset_id_new: uuidv4()
+            dataset_id_new: actualDatasetId
           }
         );
       }
@@ -364,7 +368,7 @@ const SynthesizeDataset: React.FC = () => {
       console.log("Dataset generation response:", response);
 
       if (response.data && (response.data as any).status === "success") {
-        setDatasetId(newDatasetId);
+        setDatasetId(actualDatasetId);
         setIsDatasetReady(false);
         setGeneratedConversations([]);
         setStep(1);
